@@ -699,10 +699,10 @@ fn test_running_status_color_in_output() {
     state.sidebar_focused = false;
 
     let styled = render_to_styled_string(&mut state, 28, 24);
-    // Running status color is 82
+    // Spinner pulse color at frame 0 is 82 (from SPINNER_PULSE[0])
     assert!(
         styled.contains("fg:82"),
-        "Running status should use status_running color (82)"
+        "Running spinner should use SPINNER_PULSE[0] color (82)"
     );
 }
 

@@ -3,10 +3,10 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
-use crate::state::{AgentFilter, AppState, Focus};
+use crate::state::{AgentFilter, AppState, Focus, RepoFilter};
 use crate::tmux::PaneStatus;
 use crate::ui::colors::ColorTheme;
 
@@ -15,7 +15,8 @@ use super::text::{
     wrap_text_char,
 };
 
-fn render_filter_bar<'a>(state: &AppState) -> Line<'a> {
+/// Render the filter bar. Returns (Line, repo_button_col).
+fn render_filter_bar<'a>(state: &AppState, bar_width: u16) -> (Line<'a>, u16) {
     let theme = &state.theme;
     let (all, running, waiting, idle, error) = state.status_counts();
 
@@ -45,10 +46,12 @@ fn render_filter_bar<'a>(state: &AppState) -> Line<'a> {
 
     let mut spans: Vec<Span<'a>> = Vec::new();
     spans.push(Span::raw(" "));
+    let mut current_width: usize = 1;
 
     for (i, (filter, icon_info, count)) in items.into_iter().enumerate() {
         if i > 0 {
             spans.push(Span::raw("  "));
+            current_width += 2;
         }
 
         let is_selected = state.agent_filter == filter;
@@ -63,7 +66,9 @@ fn render_filter_bar<'a>(state: &AppState) -> Line<'a> {
                 icon_style = icon_style.add_modifier(Modifier::UNDERLINED);
             }
             spans.push(Span::styled(icon.to_string(), icon_style));
+            current_width += display_width(icon);
 
+            let count_str = format!("{count}");
             let count_style = if is_selected {
                 Style::default()
                     .fg(theme.text_active)
@@ -73,7 +78,8 @@ fn render_filter_bar<'a>(state: &AppState) -> Line<'a> {
             } else {
                 Style::default().fg(theme.text_muted)
             };
-            spans.push(Span::styled(format!("{count}"), count_style));
+            current_width += count_str.len();
+            spans.push(Span::styled(count_str, count_style));
         } else {
             let style = if is_selected {
                 Style::default()
@@ -83,10 +89,111 @@ fn render_filter_bar<'a>(state: &AppState) -> Line<'a> {
                 Style::default().fg(theme.text_muted)
             };
             spans.push(Span::styled("All", style));
+            current_width += 3;
         }
     }
 
-    Line::from(spans)
+    // Repo filter button — right-aligned
+    let repo_icon = "▼";
+    let repo_label = match &state.repo_filter {
+        RepoFilter::All => repo_icon.to_string(),
+        RepoFilter::Repo(name) => {
+            let max_w = 8;
+            let truncated = truncate_to_width(name, max_w);
+            format!("{} {}", repo_icon, truncated)
+        }
+    };
+    let repo_btn_width = display_width(&repo_label) + 1; // 1 for leading space
+    let gap = (bar_width as usize).saturating_sub(current_width + repo_btn_width);
+    let repo_button_col = (current_width + gap) as u16;
+
+    spans.push(Span::raw(" ".repeat(gap)));
+
+    let repo_has_filter = !matches!(state.repo_filter, RepoFilter::All);
+    let repo_style = if state.repo_popup_open {
+        Style::default()
+            .fg(theme.text_active)
+            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+    } else if repo_has_filter {
+        Style::default()
+            .fg(theme.text_active)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text_muted)
+    };
+    spans.push(Span::styled(format!(" {}", repo_label), repo_style));
+
+    (Line::from(spans), repo_button_col)
+}
+
+fn render_repo_popup(frame: &mut Frame, state: &mut AppState, area: Rect) {
+    let theme = &state.theme;
+    let repos = state.repo_names();
+    if repos.is_empty() {
+        return;
+    }
+
+    let max_name_len = repos.iter().map(|r| display_width(r)).max().unwrap_or(3);
+    // Width: marker(2) + name + padding(1) + borders(2)
+    let popup_width = (max_name_len + 5).min(area.width as usize).max(10) as u16;
+    let popup_height =
+        (repos.len() as u16 + 2).min(area.height.saturating_sub(1)); // +2 for borders
+
+    // Right-aligned, below filter bar
+    let popup_x = area.x + area.width.saturating_sub(popup_width);
+    let popup_y = area.y + 1;
+
+    let popup_rect = Rect::new(popup_x, popup_y, popup_width, popup_height);
+    state.repo_popup_area = Some(popup_rect);
+
+    frame.render_widget(Clear, popup_rect);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border_active));
+    let inner = block.inner(popup_rect);
+    frame.render_widget(block, popup_rect);
+
+    let inner_width = inner.width as usize;
+    for (i, name) in repos.iter().enumerate() {
+        if i >= inner.height as usize {
+            break;
+        }
+
+        let is_highlighted = i == state.repo_popup_selected;
+        let is_current = match &state.repo_filter {
+            RepoFilter::All => i == 0,
+            RepoFilter::Repo(n) => *n == *name,
+        };
+
+        let marker = if is_current { "● " } else { "  " };
+        let truncated = truncate_to_width(name, inner_width.saturating_sub(2));
+        let text = format!("{}{}", marker, truncated);
+        let text_dw = display_width(&text);
+        let padding = " ".repeat(inner_width.saturating_sub(text_dw));
+
+        let style = if is_highlighted {
+            Style::default()
+                .fg(theme.text_active)
+                .bg(theme.selection_bg)
+                .add_modifier(Modifier::BOLD)
+        } else if is_current {
+            Style::default()
+                .fg(theme.text_active)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text_muted)
+        };
+
+        let line_rect = Rect::new(inner.x, inner.y + i as u16, inner.width, 1);
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                format!("{}{}", text, padding),
+                style,
+            ))),
+            line_rect,
+        );
+    }
 }
 
 pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
@@ -100,7 +207,8 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
         width: area.width,
         height: 1.min(area.height),
     };
-    let filter_line = render_filter_bar(state);
+    let (filter_line, repo_btn_col) = render_filter_bar(state, area.width);
+    state.repo_button_col = repo_btn_col;
     frame.render_widget(Paragraph::new(vec![filter_line]), filter_area);
 
     // Scrollable agent list below
@@ -118,6 +226,9 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
     let filter = state.agent_filter;
 
     for group in &state.repo_groups {
+        if !state.repo_filter.matches_group(&group.name) {
+            continue;
+        }
         let filtered_panes: Vec<_> = group
             .panes
             .iter()
@@ -243,6 +354,11 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
 
     let paragraph = Paragraph::new(lines).scroll((state.agents_scroll.offset as u16, 0));
     frame.render_widget(paragraph, list_area);
+
+    // Render popup overlay on top if open
+    if state.repo_popup_open {
+        render_repo_popup(frame, state, area);
+    }
 }
 
 fn bordered_line<'a>(
@@ -910,5 +1026,80 @@ mod tests {
         assert_eq!(lines.len(), 2);
         let hint = line_text(&lines[1]);
         assert!(hint.contains("Waiting for prompt"));
+    }
+
+    // ─── render_filter_bar tests ──────────────────────────────
+
+    fn make_state_with_groups(groups: Vec<crate::group::RepoGroup>) -> AppState {
+        let mut state = AppState::new("%99".into());
+        state.repo_groups = groups;
+        state.rebuild_row_targets();
+        state
+    }
+
+    fn filter_bar_text(state: &AppState, width: u16) -> String {
+        let (line, _) = render_filter_bar(state, width);
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn render_filter_bar_includes_repo_button() {
+        let state = make_state_with_groups(vec![]);
+        let text = filter_bar_text(&state, 28);
+        assert!(text.contains("▼"), "filter bar should contain repo button ▼");
+    }
+
+    #[test]
+    fn render_filter_bar_repo_button_col_returned() {
+        let state = make_state_with_groups(vec![]);
+        let (_, col) = render_filter_bar(&state, 28);
+        // repo button should be near the right edge
+        assert!(col > 15, "repo button col should be right-aligned, got {col}");
+        assert!(col < 28, "repo button col should be within width, got {col}");
+    }
+
+    #[test]
+    fn render_filter_bar_shows_repo_name_when_filtered() {
+        let mut state = make_state_with_groups(vec![crate::group::RepoGroup {
+            name: "my-app".into(),
+            has_focus: true,
+            panes: vec![],
+        }]);
+        state.repo_filter = RepoFilter::Repo("my-app".into());
+        let text = filter_bar_text(&state, 40);
+        assert!(
+            text.contains("my-app"),
+            "filter bar should show filtered repo name, got: {text}"
+        );
+    }
+
+    #[test]
+    fn render_filter_bar_truncates_long_repo_name() {
+        let mut state = make_state_with_groups(vec![crate::group::RepoGroup {
+            name: "very-long-repository-name".into(),
+            has_focus: true,
+            panes: vec![],
+        }]);
+        state.repo_filter = RepoFilter::Repo("very-long-repository-name".into());
+        let text = filter_bar_text(&state, 28);
+        // Should be truncated, not the full name
+        assert!(
+            !text.contains("very-long-repository-name"),
+            "long repo name should be truncated, got: {text}"
+        );
+        assert!(text.contains("▼"));
+    }
+
+    #[test]
+    fn render_filter_bar_popup_open_styling() {
+        let mut state = make_state_with_groups(vec![]);
+        state.repo_popup_open = true;
+        let (line, _) = render_filter_bar(&state, 28);
+        // Find the repo button span and check it has UNDERLINED modifier
+        let last_span = line.spans.last().unwrap();
+        assert!(
+            last_span.style.add_modifier.contains(Modifier::UNDERLINED),
+            "repo button should be underlined when popup is open"
+        );
     }
 }

@@ -64,6 +64,9 @@ pub fn branch_label(git_info: &crate::group::PaneGitInfo) -> String {
 
 /// Truncate string to fit within max display width, adding … if needed
 pub fn truncate_to_width(text: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
     let dw = display_width(text);
     if dw <= max_width {
         return text.to_string();
@@ -208,6 +211,18 @@ mod tests {
     fn pad_to_exact() {
         let p = pad_to(5, 5);
         assert_eq!(p, "");
+    }
+
+    // ─── truncate_to_width ─────────────────────────────────────────
+
+    #[test]
+    fn truncate_to_width_zero_width() {
+        assert_eq!(truncate_to_width("hello", 0), "");
+    }
+
+    #[test]
+    fn truncate_to_width_exact() {
+        assert_eq!(truncate_to_width("hello", 5), "hello");
     }
 
     // ─── wrap_text ─────────────────────────────────────────────────

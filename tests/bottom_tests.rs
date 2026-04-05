@@ -139,13 +139,12 @@ fn snapshot_git_clean_ui() {
     state.sidebar_focused = true;
     // No git changes
 
-    let _output = render_to_string(&mut state, 28, 14);
     let plain = render_to_string(&mut state, 28, 14);
     assert!(plain.contains("Working tree clean"));
 
     let output = render_to_string(&mut state, 28, 24);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 ╭ Activity │ Git ──────────╮
@@ -181,7 +180,7 @@ fn snapshot_activity_tab_active_ui() {
 
     let output = render_to_string(&mut state, 28, 24);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 ╭ Activity │ Git ──────────╮
@@ -522,7 +521,7 @@ fn snapshot_subagents_tree_ui() {
 
     let output = render_to_string(&mut state, 40, 28);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0                   ▼
 ╭ project ─────────────────────────────╮
 │ ● claude                             │
 │   ├ Explore #1                       │
@@ -559,7 +558,7 @@ fn snapshot_subagent_long_name_truncated_ui() {
     // Narrow width (28) to force truncation of long subagent names
     let output = render_to_string(&mut state, 28, 27);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 │   ├ superpowers:code-rev…│
@@ -597,7 +596,7 @@ fn snapshot_activity_empty_centered_ui() {
     let plain = render_to_string(&mut state, 28, 26);
     assert!(plain.contains("No activity yet"));
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0       ▼
 ╭ project ─────────────────╮
 │ ○ claude                 │
 │   Waiting for prompt…    │
@@ -630,7 +629,7 @@ fn snapshot_git_clean_centered_ui() {
     let plain = render_to_string(&mut state, 28, 26);
     assert!(plain.contains("Working tree clean"));
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0       ▼
 ╭ project ─────────────────╮
 │ ○ claude                 │
 │   Waiting for prompt…    │
@@ -703,7 +702,7 @@ fn snapshot_git_no_data_shows_centered_clean() {
 
     let output = render_to_string(&mut state, 28, 24);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 ╭ Activity │ Git ──────────╮
@@ -852,7 +851,7 @@ fn snapshot_branch_truncated_ui() {
 
     let plain = render_to_string(&mut state, 28, 30);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ dotfiles ────────────────╮
 │ ● claude                 │
 │   feature/tmux-sidebar-d…│
@@ -909,7 +908,7 @@ fn snapshot_git_staged_unstaged_untracked_ui() {
 
     let output = render_to_string(&mut state, 28, 30);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 ╰──────────────────────────╯
@@ -994,7 +993,7 @@ fn snapshot_git_staged_only_ui() {
 
     let output = render_to_string(&mut state, 28, 24);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 ╭ Activity │ Git ──────────╮

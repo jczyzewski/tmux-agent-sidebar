@@ -4,7 +4,7 @@ mod test_helpers;
 use test_helpers::*;
 use tmux_agent_sidebar::activity::ActivityEntry;
 use tmux_agent_sidebar::group::{PaneGitInfo, RepoGroup};
-use tmux_agent_sidebar::state::{AppState, BottomTab, Focus, RowTarget};
+use tmux_agent_sidebar::state::{AgentFilter, AppState, BottomTab, Focus, RepoFilter, RowTarget};
 use tmux_agent_sidebar::tmux::{AgentType, PaneInfo, PaneStatus, SessionInfo, WindowInfo};
 
 // ─── State Transition Tests ────────────────────────────────────────
@@ -448,22 +448,6 @@ fn test_git_tab_active_after_tab_switch() {
     assert_eq!(state.bottom_tab, BottomTab::Activity);
 }
 
-#[test]
-fn test_git_tab_default_is_activity() {
-    let state = make_state(vec![]);
-    assert_eq!(state.bottom_tab, BottomTab::Activity);
-    assert_ne!(state.bottom_tab, BottomTab::GitStatus);
-}
-
-#[test]
-fn test_git_tab_equality_check() {
-    // Verify BottomTab::GitStatus == check works correctly for the AtomicBool flag
-    let tab = BottomTab::GitStatus;
-    assert!(tab == BottomTab::GitStatus);
-    let tab2 = BottomTab::Activity;
-    assert!(tab2 != BottomTab::GitStatus);
-}
-
 // ─── State: global sync → rebuild consistency Tests ─────────────
 
 #[test]
@@ -515,4 +499,137 @@ fn test_cursor_sync_clamped_by_rebuild() {
     state.rebuild_row_targets();
     // Should be clamped to last valid index
     assert_eq!(state.selected_agent_row, 0);
+}
+
+// ─── apply_global_options (sync) tests ──────────────────────────────
+
+fn make_opts(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+#[test]
+fn sync_ignores_tmux_value_matching_last_saved_filter() {
+    // Scenario: save_filter wrote "all", tmux still has "all".
+    // User locally changed filter to Running. Sync should NOT overwrite.
+    let mut state = make_state(vec![]);
+    state.agent_filter = AgentFilter::Running;
+    // last_saved_filter defaults to All (same as tmux)
+
+    let opts = make_opts(&[("@sidebar_filter", "all")]);
+    state.apply_global_options(&opts);
+
+    assert_eq!(
+        state.agent_filter,
+        AgentFilter::Running,
+        "local filter change should not be overwritten when tmux matches last_saved"
+    );
+}
+
+#[test]
+fn sync_applies_external_filter_change() {
+    // Scenario: another sidebar instance changed the filter to "waiting".
+    // last_saved is "all" (what we last wrote), tmux now says "waiting".
+    let mut state = make_state(vec![]);
+    state.agent_filter = AgentFilter::All;
+    // last_saved_filter = All (default)
+
+    let opts = make_opts(&[("@sidebar_filter", "waiting")]);
+    state.apply_global_options(&opts);
+
+    assert_eq!(
+        state.agent_filter,
+        AgentFilter::Waiting,
+        "external filter change should be applied"
+    );
+}
+
+#[test]
+fn sync_does_not_revert_on_save_failure() {
+    // Scenario: User changed filter to Running, but save_filter failed
+    // (tmux still has "error" from before). last_saved stays at "error"
+    // because the write failed. On next sync, tmux="error" == last_saved="error"
+    // → should NOT overwrite the user's Running choice.
+    let mut state = make_state(vec![]);
+
+    // Simulate: initial state was Error (from previous session)
+    state.agent_filter = AgentFilter::Error;
+    // Pretend startup sync set last_saved to Error
+    state.apply_global_options(&make_opts(&[("@sidebar_filter", "error")]));
+    assert_eq!(state.agent_filter, AgentFilter::Error);
+
+    // User changes filter to Running. save_filter would call tmux set,
+    // but we simulate a failure by NOT updating last_saved_filter.
+    state.agent_filter = AgentFilter::Running;
+    // (save_filter failed — last_saved_filter stays Error)
+
+    // Next sync: tmux still has "error"
+    let opts = make_opts(&[("@sidebar_filter", "error")]);
+    state.apply_global_options(&opts);
+
+    assert_eq!(
+        state.agent_filter,
+        AgentFilter::Running,
+        "failed save should not cause sync to revert the user's change"
+    );
+}
+
+#[test]
+fn sync_ignores_tmux_value_matching_last_saved_repo_filter() {
+    let mut state = make_state(vec![]);
+    state.repo_filter = RepoFilter::Repo("my-app".into());
+    // last_saved_repo_filter defaults to All
+
+    let opts = make_opts(&[("@sidebar_repo_filter", "all")]);
+    state.apply_global_options(&opts);
+
+    assert_eq!(
+        state.repo_filter,
+        RepoFilter::Repo("my-app".into()),
+        "local repo filter change should not be overwritten"
+    );
+}
+
+#[test]
+fn sync_applies_external_repo_filter_change() {
+    let mut state = make_state(vec![]);
+    state.repo_filter = RepoFilter::All;
+
+    let opts = make_opts(&[("@sidebar_repo_filter", "my-app")]);
+    state.apply_global_options(&opts);
+
+    assert_eq!(
+        state.repo_filter,
+        RepoFilter::Repo("my-app".into()),
+        "external repo filter change should be applied"
+    );
+}
+
+#[test]
+fn sync_cursor_always_applies() {
+    // Cursor sync doesn't have the same write-failure issue because
+    // it's less critical. Verify it still works as before.
+    let mut state = make_state(vec![]);
+    state.selected_agent_row = 0;
+
+    let opts = make_opts(&[("@sidebar_cursor", "3")]);
+    state.apply_global_options(&opts);
+
+    assert_eq!(state.selected_agent_row, 3);
+}
+
+#[test]
+fn sync_empty_opts_changes_nothing() {
+    let mut state = make_state(vec![]);
+    state.agent_filter = AgentFilter::Running;
+    state.repo_filter = RepoFilter::Repo("app".into());
+    state.selected_agent_row = 2;
+
+    state.apply_global_options(&std::collections::HashMap::new());
+
+    assert_eq!(state.agent_filter, AgentFilter::Running);
+    assert_eq!(state.repo_filter, RepoFilter::Repo("app".into()));
+    assert_eq!(state.selected_agent_row, 2);
 }

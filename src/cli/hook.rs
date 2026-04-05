@@ -6,11 +6,21 @@ use super::{
     tmux_pane,
 };
 
+/// Returns whether the pane's cwd should be updated.
+/// When subagents are active, events may come from a subagent running in a
+/// worktree, so we should NOT overwrite the parent agent's cwd.
+fn should_update_cwd(current_subagents: &str) -> bool {
+    current_subagents.is_empty()
+}
+
 fn set_agent_meta(pane: &str, agent: &str, json: &serde_json::Value) {
     tmux::set_pane_option(pane, "@pane_agent", agent);
     let cwd = json_str(json, "cwd");
     if !cwd.is_empty() {
-        tmux::set_pane_option(pane, "@pane_cwd", cwd);
+        let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
+        if should_update_cwd(&current_subagents) {
+            tmux::set_pane_option(pane, "@pane_cwd", cwd);
+        }
     }
     let pmode = json_str(json, "permission_mode");
     if !pmode.is_empty() {
@@ -662,5 +672,71 @@ mod tests {
         // Plan completes, Explore still running
         let remaining = remove_last_subagent(&list, "Plan").unwrap();
         assert_eq!(remaining, "Explore");
+    }
+
+    // ─── should_update_cwd tests (worktree subagent bug) ───────────
+
+    #[test]
+    fn should_update_cwd_when_no_subagents() {
+        // No subagents active → safe to update cwd
+        assert!(should_update_cwd(""));
+    }
+
+    #[test]
+    fn should_not_update_cwd_when_subagent_active() {
+        // Subagent is running (possibly in a worktree) → do NOT overwrite
+        // parent's cwd, because the event may come from the subagent
+        // which inherits the same $TMUX_PANE.
+        assert!(!should_update_cwd("Explore"));
+    }
+
+    #[test]
+    fn should_not_update_cwd_when_multiple_subagents_active() {
+        assert!(!should_update_cwd("Explore,Plan"));
+    }
+
+    #[test]
+    fn should_update_cwd_lifecycle_subagent_start_then_stop() {
+        // Full lifecycle: subagent starts → blocks cwd update → subagent stops → allows again
+        let no_subagents = "";
+        let one_subagent = append_subagent(no_subagents, "Explore");
+
+        // Before subagent: cwd update allowed
+        assert!(should_update_cwd(no_subagents));
+
+        // During subagent: cwd update blocked
+        assert!(!should_update_cwd(&one_subagent));
+
+        // After subagent stops: cwd update allowed again
+        let after_stop = remove_last_subagent(&one_subagent, "Explore").unwrap();
+        assert!(should_update_cwd(&after_stop));
+    }
+
+    #[test]
+    fn should_update_cwd_nested_subagents_require_all_stopped() {
+        // Two subagents running: cwd blocked until BOTH stop
+        let list = append_subagent("", "Explore");
+        let list = append_subagent(&list, "Plan");
+        assert!(!should_update_cwd(&list));
+
+        // One stops: still blocked
+        let list = remove_last_subagent(&list, "Plan").unwrap();
+        assert!(!should_update_cwd(&list));
+
+        // Both stopped: allowed
+        let list = remove_last_subagent(&list, "Explore").unwrap();
+        assert!(should_update_cwd(&list));
+    }
+
+    #[test]
+    fn should_update_cwd_race_condition_session_start_before_subagent_start() {
+        // Edge case: if subagent's session-start fires BEFORE the parent's
+        // subagent-start hook sets @pane_subagents, the cwd would be updated.
+        // This documents the known limitation — @pane_subagents is still empty.
+        let before_subagent_start_hook = "";
+        assert!(
+            should_update_cwd(before_subagent_start_hook),
+            "known limitation: if session-start races ahead of subagent-start, cwd is updated"
+        );
     }
 }

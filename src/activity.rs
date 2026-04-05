@@ -137,11 +137,13 @@ pub fn parse_task_progress(entries: &[ActivityEntry]) -> TaskProgress {
                     (String::new(), entry.label.clone())
                 };
                 // Reset when a new task set starts:
-                // - ID #1 (new session), or
+                // - ID already exists (restarted session reusing IDs), or
                 // - all existing tasks are completed (new batch)
                 let all_done =
                     !tasks.is_empty() && tasks.iter().all(|(_, _, s)| *s == TaskStatus::Completed);
-                if id == "1" || all_done {
+                let id_exists =
+                    !id.is_empty() && tasks.iter().any(|(existing_id, _, _)| existing_id == &id);
+                if id_exists || all_done {
                     tasks.clear();
                 }
                 tasks.push((id, subject, TaskStatus::Pending));

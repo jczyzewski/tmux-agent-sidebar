@@ -133,7 +133,7 @@ pub fn run_tmux(args: &[&str]) -> Option<String> {
 /// plus one `list-sessions` call, instead of N+1 subprocess invocations.
 pub fn query_sessions() -> Vec<SessionInfo> {
     // 1. Get all panes across all sessions in one call
-    let pane_format = "#{session_name}|#{window_id}|#{window_index}|#{window_name}|#{window_active}|#{automatic-rename}|#{pane_active}|#{@pane_status}|#{@pane_attention}|#{@pane_agent}|#{@pane_name}|#{pane_current_path}|#{pane_current_command}|#{@pane_role}|#{pane_id}|#{@pane_prompt}|#{@pane_prompt_source}|#{@pane_started_at}|#{@pane_wait_reason}|#{pane_pid}|#{@pane_subagents}|#{@pane_cwd}|#{@pane_permission_mode}";
+    let pane_format = "#{q:session_name}|#{q:window_id}|#{q:window_index}|#{q:window_name}|#{q:window_active}|#{q:automatic-rename}|#{q:pane_active}|#{q:@pane_status}|#{q:@pane_attention}|#{q:@pane_agent}|#{q:@pane_name}|#{q:pane_current_path}|#{q:pane_current_command}|#{q:@pane_role}|#{q:pane_id}|#{q:@pane_prompt}|#{q:@pane_prompt_source}|#{q:@pane_started_at}|#{q:@pane_wait_reason}|#{q:pane_pid}|#{q:@pane_subagents}|#{q:@pane_cwd}|#{q:@pane_permission_mode}";
     let all_panes_output = match run_tmux(&["list-panes", "-a", "-F", pane_format]) {
         Some(s) => s,
         None => return vec![],
@@ -146,13 +146,13 @@ pub fn query_sessions() -> Vec<SessionInfo> {
     let mut codex_pids: Vec<(String, usize, u32)> = Vec::new();
 
     for line in all_panes_output.lines() {
-        let parts: Vec<&str> = line.splitn(23, '|').collect();
+        let parts = split_tmux_fields(line, '|');
         if parts.len() < 23 {
             continue;
         }
 
-        let session_name = parts[0];
-        let window_id = parts[1];
+        let session_name = parts[0].as_str();
+        let window_id = parts[1].as_str();
         let pane_line = parts[6..].join("|");
 
         let sessions_entry = sessions_map.entry(session_name.to_string()).or_default();
@@ -216,7 +216,7 @@ pub fn query_sessions() -> Vec<SessionInfo> {
 /// Parse a single pane line from `tmux list-panes -F`.
 /// Returns None if the line has fewer than 17 fields, is a sidebar, or has no agent.
 pub(crate) fn parse_pane_line(line: &str) -> Option<PaneInfo> {
-    let parts: Vec<&str> = line.splitn(17, '|').collect();
+    let parts = split_tmux_fields(line, '|');
     if parts.len() < 17 {
         return None;
     }
@@ -225,12 +225,12 @@ pub(crate) fn parse_pane_line(line: &str) -> Option<PaneInfo> {
         return None;
     }
 
-    let agent = AgentType::from_str(parts[3])?;
+    let agent = AgentType::from_str(&parts[3])?;
 
     let pane_pid: Option<u32> = parts[13].parse().ok();
 
     // Prefer @pane_cwd (set by hook from agent's cwd) over pane_current_path
-    let pane_cwd = parts[15];
+    let pane_cwd = &parts[15];
     let path = if !pane_cwd.is_empty() {
         pane_cwd.to_string()
     } else {
@@ -240,20 +240,20 @@ pub(crate) fn parse_pane_line(line: &str) -> Option<PaneInfo> {
     // Claude: read permission_mode from hook-set tmux variable
     // Codex: no permission_mode in hooks, detect from process args later
     let permission_mode = if agent == AgentType::Claude {
-        PermissionMode::from_str(parts[16])
+        PermissionMode::from_str(&parts[16])
     } else {
         PermissionMode::Default
     };
 
-    let prompt_source = parts[10];
+    let prompt_source = &parts[10];
     let prompt_is_response = prompt_source == "response";
 
     // Sanitize prompt: replace pipes/newlines, filter system-injected messages, truncate
-    let prompt = sanitize_prompt(parts[9]);
+    let prompt = sanitize_prompt(&parts[9]);
 
     Some(PaneInfo {
         pane_active: parts[0] == "1",
-        status: PaneStatus::from_str(parts[1]),
+        status: PaneStatus::from_str(&parts[1]),
         attention: !parts[2].is_empty(),
         agent,
         path,
@@ -263,7 +263,7 @@ pub(crate) fn parse_pane_line(line: &str) -> Option<PaneInfo> {
         started_at: parts[11].parse().ok(),
         wait_reason: parts[12].to_string(),
         permission_mode,
-        subagents: parse_subagents(parts[14]),
+        subagents: parse_subagents(&parts[14]),
         pane_pid,
     })
 }
@@ -292,9 +292,11 @@ fn apply_codex_permission_modes(
                 if ppid_str.trim() != pid_str {
                     continue;
                 }
-                panes[*idx].permission_mode = detect_codex_permission_mode(args);
-                if panes[*idx].permission_mode != PermissionMode::Default {
-                    break;
+                if let Some(pane) = panes.get_mut(*idx) {
+                    pane.permission_mode = detect_codex_permission_mode(args);
+                    if pane.permission_mode != PermissionMode::Default {
+                        break;
+                    }
                 }
             }
         }
@@ -331,6 +333,41 @@ fn parse_subagents(raw: &str) -> Vec<String> {
         .filter(|s| !s.is_empty())
         .collect();
     items.iter().map(|item| item.to_string()).collect()
+}
+
+/// Split a tmux format line while honoring tmux `#{q:...}` backslash escapes.
+fn split_tmux_fields(line: &str, delimiter: char) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut current = String::new();
+    let mut escaped = false;
+
+    for ch in line.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+
+        if ch == delimiter {
+            fields.push(current);
+            current = String::new();
+            continue;
+        }
+
+        current.push(ch);
+    }
+
+    if escaped {
+        current.push('\\');
+    }
+
+    fields.push(current);
+    fields
 }
 
 pub fn get_sidebar_pane_info(tmux_pane: &str) -> (bool, u16, u16) {
@@ -424,19 +461,18 @@ pub fn find_active_pane(sidebar_pane: &str) -> Option<(String, String)> {
 }
 
 /// Pure logic: pick the active non-sidebar pane from a list.
-/// Prefers pane_active=true with a non-empty path, then any non-sidebar
-/// with a non-empty path. Returns None if only the sidebar exists or all
-/// paths are empty.
+/// Returns the pane with pane_active=true (excluding sidebar) if one exists.
+/// Returns None when the sidebar itself is active or no valid pane is found,
+/// so callers can preserve the previously focused pane.
 pub(crate) fn pick_active_pane(
     sidebar_pane: &str,
     panes: &[(String, bool, String)],
 ) -> Option<(String, String)> {
     let valid = |p: &&(String, bool, String)| p.0 != sidebar_pane && !p.2.is_empty();
-    let active = panes
+    panes
         .iter()
         .find(|p| p.1 && valid(p))
-        .or_else(|| panes.iter().find(valid));
-    active.map(|p| (p.0.clone(), p.2.clone()))
+        .map(|p| (p.0.clone(), p.2.clone()))
 }
 
 /// Find the focused pane's working directory by querying tmux directly.
@@ -641,7 +677,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn parse_subagents_duplicates() {
         assert_eq!(
             parse_subagents("Explore,Explore,Plan"),
@@ -756,6 +791,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_pane_line_preserves_pipe_in_path() {
+        let mut fields = full_fields();
+        fields[5] = "/home/user/a\\|b";
+        fields[15] = "";
+        let line = make_pane_line(&fields);
+        let pane = parse_pane_line(&line).unwrap();
+        assert_eq!(pane.path, "/home/user/a|b");
+    }
+
+    #[test]
+    fn split_tmux_fields_unescapes_delimiter() {
+        let fields = split_tmux_fields("one|two\\|still-two|three", '|');
+        assert_eq!(fields, vec!["one", "two|still-two", "three"]);
+    }
+
     // ─── pick_active_pane tests ───────────────────────────────────
 
     fn pane_tuple(id: &str, active: bool, path: &str) -> (String, bool, String) {
@@ -781,14 +832,13 @@ mod tests {
         ];
         let result = pick_active_pane("%99", &panes);
         assert_eq!(
-            result,
-            Some(("%1".into(), "/home/user/a".into())),
-            "should fall back to non-sidebar pane"
+            result, None,
+            "sidebar is active, no other pane is active → None (preserve previous focus)"
         );
     }
 
     #[test]
-    fn pick_active_pane_falls_back_to_first_non_sidebar() {
+    fn pick_active_pane_none_when_no_pane_is_active() {
         let panes = vec![
             pane_tuple("%99", false, "/sidebar"),
             pane_tuple("%1", false, "/home/user/a"),
@@ -796,9 +846,8 @@ mod tests {
         ];
         let result = pick_active_pane("%99", &panes);
         assert_eq!(
-            result,
-            Some(("%1".into(), "/home/user/a".into())),
-            "should pick first non-sidebar when none is active"
+            result, None,
+            "no pane is active → None (preserve previous focus)"
         );
     }
 
@@ -816,17 +865,49 @@ mod tests {
     }
 
     #[test]
-    fn pick_active_pane_skips_empty_path_falls_back() {
+    fn pick_active_pane_skips_empty_path() {
         let panes = vec![
             pane_tuple("%1", true, ""),
             pane_tuple("%2", false, "/home/user/b"),
         ];
         let result = pick_active_pane("%99", &panes);
-        // %1 is active but has empty path → skip, fall back to %2
+        // %1 is active but has empty path → skip, no other active pane → None
+        assert_eq!(
+            result, None,
+            "active pane with empty path is invalid → None"
+        );
+    }
+
+    #[test]
+    fn pick_active_pane_sidebar_active_with_multiple_panes() {
+        // Simulates: sidebar has tmux focus, pane1 and pane2 exist but neither is active.
+        // This is the key scenario: when user moves to sidebar, all other panes
+        // have pane_active=false (only sidebar has true, but it's excluded).
+        let panes = vec![
+            pane_tuple("%99", true, "/sidebar"),
+            pane_tuple("%1", false, "/home/user/project-a"),
+            pane_tuple("%2", false, "/home/user/project-b"),
+        ];
+        let result = pick_active_pane("%99", &panes);
+        assert_eq!(
+            result, None,
+            "sidebar has focus → None so caller preserves previous focused pane"
+        );
+    }
+
+    #[test]
+    fn pick_active_pane_returns_pane_when_non_sidebar_is_active() {
+        // When user focuses pane2 (not sidebar), pick_active_pane returns pane2.
+        let panes = vec![
+            pane_tuple("%99", false, "/sidebar"),
+            pane_tuple("%1", false, "/home/user/project-a"),
+            pane_tuple("%2", true, "/home/user/project-b"),
+        ];
+        let result = pick_active_pane("%99", &panes);
         assert_eq!(
             result,
-            Some(("%2".into(), "/home/user/b".into())),
-            "should skip empty-path pane and fall back"
+            Some(("%2".into(), "/home/user/project-b".into())),
+            "pane2 is active → returned"
         );
     }
 

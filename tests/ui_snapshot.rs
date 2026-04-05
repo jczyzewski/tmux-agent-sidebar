@@ -30,7 +30,7 @@ fn snapshot_single_agent_idle_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0       ▼
 │ ○ claude                 │
 │   Waiting for prompt…    │
 ╰──────────────────────────╯
@@ -60,7 +60,7 @@ fn snapshot_single_agent_running_with_elapsed() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ dotfiles ────────────────╮
 │ ● claude             2m5s│
 ╰──────────────────────────╯
@@ -112,7 +112,7 @@ fn snapshot_agent_with_prompt_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0       ▼
 │ ○ claude                 │
 │   fix the bug            │
 ╰──────────────────────────╯
@@ -142,7 +142,7 @@ fn snapshot_agent_with_japanese_prompt_ui() {
 
     let output = render_to_string(&mut state, 28, 27);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 │ ● claude                 │
 │   こ れ っ て 今 1時 間 経 っ て い │
 │   る け ど 、 起 動 し て 確 認 し  │
@@ -202,7 +202,7 @@ fn snapshot_two_agents_same_window_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○1  ✕0
+ All  ●1  ◐0  ○1  ✕0       ▼
 │ ● claude                 │
 │   fix the bug            │
 │ ──────────────────────── │
@@ -248,7 +248,7 @@ fn snapshot_two_windows_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○1  ✕0
+ All  ●1  ◐0  ○1  ✕0       ▼
 │ ● claude                 │
 ╰──────────────────────────╯
 ╭ project-b ───────────────╮
@@ -297,7 +297,7 @@ fn snapshot_multi_session_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○1  ✕0
+ All  ●1  ◐0  ○1  ✕0       ▼
 │ ● claude                 │
 ╰──────────────────────────╯
 ╭ api ─────────────────────╮
@@ -327,7 +327,7 @@ fn snapshot_wait_reason_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●0  ◐1  ○0  ✕0
+ All  ●0  ◐1  ○0  ✕0       ▼
 │ ◐ claude                 │
 │   permission required    │
 ╰──────────────────────────╯
@@ -357,7 +357,7 @@ fn snapshot_auto_rename_window_title_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0       ▼
 │ ○ claude                 │
 │   Waiting for prompt…    │
 ╰──────────────────────────╯
@@ -403,7 +403,7 @@ fn snapshot_activity_log_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 ╰──────────────────────────╯
@@ -442,7 +442,7 @@ fn snapshot_activity_log_long_label_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 ╭ project ─────────────────╮
 │ ● claude                 │
 ╰──────────────────────────╯
@@ -477,7 +477,7 @@ fn snapshot_prompt_wrapping_ui() {
 
     let output = render_to_string(&mut state, 28, 27);
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0       ▼
 │ ○ claude                 │
 │   Please fix the         │
 │   authentication bug in  │
@@ -508,7 +508,7 @@ fn snapshot_selected_unfocused_ui() {
 
     let output = render_to_string(&mut state, 28, 26);
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0       ▼
 ╭ project ─────────────────╮
 │ ○ claude                 │
 │   Waiting for prompt…    │
@@ -539,7 +539,7 @@ fn snapshot_error_state_ui() {
 
     let output = render_to_string(&mut state, 28, 25);
     let expected = indoc! {r#"
- All  ●0  ◐0  ○0  ✕1
+ All  ●0  ◐0  ○0  ✕1       ▼
 │ ✕ claude                 │
 │   something broke        │
 ╰──────────────────────────╯
@@ -622,7 +622,7 @@ fn snapshot_worktree_branch_ui() {
         "worktree should show '+ ' prefix before branch name"
     );
     let expected = indoc! {r#"
- All  ●1  ◐0  ○0  ✕0
+ All  ●1  ◐0  ○0  ✕0       ▼
 │ ● claude                 │
 │   + feature/sidebar      │
 │   fix bug                │
@@ -766,7 +766,7 @@ fn snapshot_all_elements_combined_ui() {
     );
     assert!(output.contains("fixing the bug"), "should show prompt");
     let expected = indoc! {r#"
- All  ●0  ◐1  ○0  ✕0
+ All  ●0  ◐1  ○0  ✕0         ▼
 ╭ project ───────────────────╮
 │ ◐ claude auto              │
 │   main                     │
@@ -794,7 +794,7 @@ fn snapshot_response_japanese_ui() {
     let output = render_to_string(&mut state, 30, 27);
     assert!(output.contains("▶"), "should show response arrow");
     let expected = indoc! {r#"
- All  ●0  ◐0  ○1  ✕0
+ All  ●0  ◐0  ○1  ✕0         ▼
 │ ○ claude                   │
 │   ▶ 修 正 が 完 了 し ま し た 。 テ  │
 │     ス ト も 全 て 通 っ て い ま す  │
@@ -832,7 +832,7 @@ fn snapshot_three_groups_middle_focused_ui() {
     assert!(output.contains("repo-b"), "should show second group");
     assert!(output.contains("repo-c"), "should show third group");
     let expected = indoc! {r#"
- All  ●1  ◐0  ○2  ✕0
+ All  ●1  ◐0  ○2  ✕0       ▼
 ╭ repo-a ──────────────────╮
 │ ● claude                 │
 ╰──────────────────────────╯
@@ -1040,7 +1040,7 @@ fn right_border_all_permission_modes_and_agents() {
 #[test]
 fn snapshot_filter_bar_shows_counts() {
     let pane1 = make_pane(AgentType::Claude, PaneStatus::Running);
-    let mut pane2 = PaneInfo {
+    let pane2 = PaneInfo {
         pane_id: "%2".into(),
         pane_active: false,
         status: PaneStatus::Idle,
@@ -1059,7 +1059,7 @@ fn snapshot_filter_bar_shows_counts() {
 #[test]
 fn snapshot_filter_running_hides_idle() {
     let pane1 = make_pane(AgentType::Claude, PaneStatus::Running);
-    let mut pane2 = PaneInfo {
+    let pane2 = PaneInfo {
         pane_id: "%2".into(),
         pane_active: false,
         status: PaneStatus::Idle,
@@ -1077,7 +1077,7 @@ fn snapshot_filter_running_hides_idle() {
 #[test]
 fn snapshot_filter_idle_hides_running() {
     let pane1 = make_pane(AgentType::Claude, PaneStatus::Running);
-    let mut pane2 = PaneInfo {
+    let pane2 = PaneInfo {
         pane_id: "%2".into(),
         pane_active: false,
         status: PaneStatus::Idle,
@@ -1095,7 +1095,7 @@ fn snapshot_filter_idle_hides_running() {
 #[test]
 fn snapshot_filter_hides_empty_groups() {
     let pane1 = make_pane(AgentType::Claude, PaneStatus::Running);
-    let mut pane2 = PaneInfo {
+    let pane2 = PaneInfo {
         pane_id: "%2".into(),
         pane_active: false,
         status: PaneStatus::Idle,
@@ -1122,7 +1122,7 @@ fn snapshot_filter_hides_empty_groups() {
 #[test]
 fn snapshot_filter_all_shows_everything() {
     let pane1 = make_pane(AgentType::Claude, PaneStatus::Running);
-    let mut pane2 = PaneInfo {
+    let pane2 = PaneInfo {
         pane_id: "%2".into(),
         pane_active: false,
         status: PaneStatus::Idle,
@@ -1201,7 +1201,7 @@ fn snapshot_filter_selected_has_underline() {
 fn snapshot_filter_error_shows_agents() {
     let mut pane1 = make_pane(AgentType::Claude, PaneStatus::Error);
     pane1.prompt = "something broke".into();
-    let mut pane2 = PaneInfo {
+    let pane2 = PaneInfo {
         pane_id: "%2".into(),
         pane_active: false,
         status: PaneStatus::Running,
@@ -1221,7 +1221,7 @@ fn snapshot_filter_error_shows_agents() {
 fn snapshot_filter_waiting_shows_only_waiting() {
     let mut pane1 = make_pane(AgentType::Claude, PaneStatus::Waiting);
     pane1.wait_reason = "permission_prompt".into();
-    let mut pane2 = PaneInfo {
+    let pane2 = PaneInfo {
         pane_id: "%2".into(),
         pane_active: false,
         status: PaneStatus::Idle,

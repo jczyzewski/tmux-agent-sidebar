@@ -19,6 +19,33 @@ use tmux_agent_sidebar::ui;
 
 static NEEDS_REFRESH: AtomicBool = AtomicBool::new(false);
 
+struct TuiSession {
+    entered_alt_screen: bool,
+}
+
+impl TuiSession {
+    fn enter(stdout: &mut io::Stdout) -> io::Result<Self> {
+        enable_raw_mode()?;
+        if let Err(err) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+            let _ = disable_raw_mode();
+            return Err(err);
+        }
+        Ok(Self {
+            entered_alt_screen: true,
+        })
+    }
+}
+
+impl Drop for TuiSession {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        if self.entered_alt_screen {
+            let mut stdout = io::stdout();
+            let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+        }
+    }
+}
+
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(code) = tmux_agent_sidebar::cli::run(&args) {
@@ -50,22 +77,12 @@ fn main() -> io::Result<()> {
         ])
         .output();
 
-    enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let _tui_session = TuiSession::enter(&mut stdout)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_app(&mut terminal, tmux_pane);
-
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-
-    result
+    run_app(&mut terminal, tmux_pane)
 }
 
 fn run_app(
@@ -107,6 +124,24 @@ fn run_app(
             loop {
                 let ev = event::read()?;
                 match ev {
+                    Event::Key(key) if state.repo_popup_open => {
+                        match key.code {
+                            KeyCode::Esc => state.close_repo_popup(),
+                            KeyCode::Char('j') | KeyCode::Down => {
+                                let count = state.repo_names().len();
+                                if state.repo_popup_selected + 1 < count {
+                                    state.repo_popup_selected += 1;
+                                }
+                            }
+                            KeyCode::Char('k') | KeyCode::Up => {
+                                if state.repo_popup_selected > 0 {
+                                    state.repo_popup_selected -= 1;
+                                }
+                            }
+                            KeyCode::Enter => state.confirm_repo_popup(),
+                            _ => {}
+                        }
+                    }
                     Event::Key(key) => match key.code {
                         KeyCode::Esc => {
                             if state.focus == Focus::ActivityLog || state.focus == Focus::Filter {
@@ -163,6 +198,11 @@ fn run_app(
                                 state.agent_filter = state.agent_filter.next();
                                 state.save_filter();
                                 state.rebuild_row_targets();
+                            }
+                        }
+                        KeyCode::Char('r') => {
+                            if state.focus == Focus::Filter {
+                                state.toggle_repo_popup();
                             }
                         }
                         KeyCode::Enter => {
@@ -241,6 +281,7 @@ fn run_app(
 /// Git data polling thread. Fetches git status every 2 seconds while the Git
 /// tab is active. Skips fetching when the tab is not visible.
 fn git_poll_loop(tmux_pane: &str, git_tx: &mpsc::Sender<GitData>, active: &AtomicBool) {
+    let mut last_path: Option<String> = None;
     loop {
         std::thread::sleep(Duration::from_secs(2));
 
@@ -248,9 +289,13 @@ fn git_poll_loop(tmux_pane: &str, git_tx: &mpsc::Sender<GitData>, active: &Atomi
             continue;
         }
 
-        let path = tmux::focused_pane_path(tmux_pane);
-        if let Some(path) = path {
-            let data = git::fetch_git_data(&path);
+        // When the sidebar has focus, focused_pane_path returns None.
+        // Reuse the last known path so git data keeps updating.
+        if let Some(p) = tmux::focused_pane_path(tmux_pane) {
+            last_path = Some(p);
+        }
+        if let Some(ref path) = last_path {
+            let data = git::fetch_git_data(path);
             if git_tx.send(data).is_err() {
                 return;
             }
