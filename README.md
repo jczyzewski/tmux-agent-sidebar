@@ -1,26 +1,21 @@
 # tmux-agent-sidebar
 
-A tmux sidebar that aggregates all AI coding agents (Claude Code, Codex) across every window and session into a single, unified dashboard.
-
-Displays real-time statuses, user prompts, elapsed time, git info, subagent trees, task progress, and a live activity log — all without switching windows.
+A tmux sidebar that monitors all AI coding agents (Claude Code, Codex) across every session and window — statuses, prompts, git info, activity logs, and more in one place.
 
 <!-- TODO: screenshot -->
 
 ## Features
 
-- **Cross-session monitoring** — All agents across all tmux sessions and windows in one view
-- **Repository grouping** — Agents are grouped by git repository; worktrees share the same group
-- **Pane navigation** — Select an agent and press Enter to jump to its pane (across windows)
-- **Instant refresh** — Pane focus changes trigger SIGUSR1 for immediate UI update
-- **Auto sidebar** — Automatically opens on new windows, auto-closes when only sidebar remains
-- **Per-pane tab memory** — Remembers your bottom tab (Activity/Git) choice per pane
-- **Responsive width** — Supports percentage-based width (e.g. `15%`) that adapts to window size
-- **Subagent tree** — Visualizes parallel subagents with tree connectors (`├`, `└`)
-- **Task progress** — Tracks task completion with smart debouncing to prevent UI flicker
-- **Activity log** — 20+ tool types with distinct color coding for visual scanning
-- **Git integration** — Branch, ahead/behind arrows, diff stats, PR number, and file-level changes
-- **Status filter** — Filter agents by status (All / Running / Waiting / Idle / Error) with live counts
-- **Permission badges** — Color-coded `auto` / `plan` / `!` badges always visible
+- **Cross-session monitoring** — All agents across every tmux session and window in one sidebar
+- **Pane jump** — Select an agent and press Enter to jump to its pane, even across different windows
+- **Repository grouping** — Agents working in the same repo (including worktrees) are grouped together
+- **Status filter** — Filter by Running / Waiting / Idle / Error with live counts per status
+- **Subagent tree** — Shows parent–child hierarchy of spawned subagents with tree connectors
+- **Task progress** — Displays task completion (e.g. `3/7`) synced from agent task lists
+- **Activity log** — Streams each tool invocation (Read, Edit, Bash, etc.) per agent in real time
+- **Git integration** — Branch name, ahead/behind counts, PR number (`gh`), and per-file diff stats
+- **Permission mode** — Shows `auto` / `plan` / `!` badge so you know each agent's permission level
+- **Auto sidebar** — Opens automatically on new windows, closes when no other panes remain
 
 ## Requirements
 
@@ -219,25 +214,20 @@ Create or edit `~/.codex/hooks.json`:
 
 ## Usage
 
-### Toggle Sidebar
+### Keybindings
 
 | Key | Action |
 |---|---|
-| `prefix + e` | Toggle sidebar (default keybinding) |
-
-### Sidebar Navigation
-
-| Key | Action |
-|---|---|
+| `prefix + e` | Toggle sidebar (default, customizable) |
 | `j` / `Down` | Move selection down (filter → agents → bottom panel) |
 | `k` / `Up` | Move selection up |
 | `h` / `Left` | Previous filter (when on filter bar) |
 | `l` / `Right` | Next filter (when on filter bar) |
-| `Enter` | Activate selected pane |
+| `Enter` | Jump to selected agent's pane |
 | `Tab` | Cycle status filter (All → Running → Waiting → Idle → Error) |
 | `Shift+Tab` | Switch bottom panel tab (Activity / Git) |
 | `Esc` | Return focus to agents panel |
-| Mouse click | Click agent to jump to its pane, click filter bar to select filter |
+| Mouse click | Click agent to jump to its pane, click filter to select |
 
 ### Status Icons
 
@@ -266,8 +256,8 @@ Create or edit `~/.codex/hooks.json`:
 
 ### Known Limitations
 
-- **Waiting status persists after tool approval (Claude Code)** — After approving a permission prompt, the status stays `waiting` until the next event. This is a limitation of the Claude Code hook system.
-- **No waiting status for Codex** — Codex does not support the `Notification` hook, so the `waiting` state is unavailable.
+- **Waiting status (Claude Code)** — After approving a permission prompt, the status stays `waiting` until the next hook event fires. This is a limitation of the Claude Code hook system.
+- **Codex hook coverage** — Codex does not support `Notification` or `PostToolUse` hooks, so waiting status, activity log, and task progress are unavailable.
 
 ## Accessing Agent Status from Scripts
 
