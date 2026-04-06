@@ -168,8 +168,7 @@ mod tests {
     #[test]
     fn notification_idle_prompt_is_meta_only() {
         let adapter = ClaudeAdapter;
-        let input =
-            json!({"cwd": "/tmp", "permission_mode": "default", "notification_type": "idle_prompt"});
+        let input = json!({"cwd": "/tmp", "permission_mode": "default", "notification_type": "idle_prompt"});
         let event = adapter.parse("notification", &input).unwrap();
         assert_eq!(
             event,

@@ -145,18 +145,37 @@ mod tests {
         let adapter = resolve_adapter("codex").unwrap();
         assert!(adapter.parse("notification", &json!({})).is_none());
         assert!(adapter.parse("stop-failure", &json!({})).is_none());
-        assert!(adapter.parse("subagent-start", &json!({"agent_type": "X"})).is_none());
-        assert!(adapter.parse("subagent-stop", &json!({"agent_type": "X"})).is_none());
-        assert!(adapter.parse("activity-log", &json!({"tool_name": "Read"})).is_none());
+        assert!(
+            adapter
+                .parse("subagent-start", &json!({"agent_type": "X"}))
+                .is_none()
+        );
+        assert!(
+            adapter
+                .parse("subagent-stop", &json!({"agent_type": "X"}))
+                .is_none()
+        );
+        assert!(
+            adapter
+                .parse("activity-log", &json!({"tool_name": "Read"}))
+                .is_none()
+        );
     }
 
     #[test]
     fn claude_idle_prompt_returns_meta_only_notification() {
         let adapter = resolve_adapter("claude").unwrap();
-        let input = json!({"cwd": "/tmp", "permission_mode": "auto", "notification_type": "idle_prompt"});
+        let input =
+            json!({"cwd": "/tmp", "permission_mode": "auto", "notification_type": "idle_prompt"});
         let event = adapter.parse("notification", &input).unwrap();
         match event {
-            AgentEvent::Notification { meta_only, wait_reason, agent, cwd, permission_mode } => {
+            AgentEvent::Notification {
+                meta_only,
+                wait_reason,
+                agent,
+                cwd,
+                permission_mode,
+            } => {
                 assert!(meta_only, "idle_prompt should be meta_only");
                 assert_eq!(wait_reason, "idle_prompt");
                 assert_eq!(agent, "claude");
