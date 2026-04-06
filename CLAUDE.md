@@ -61,16 +61,18 @@ Tests are in `/tests/` using Ratatui's `TestBackend` for UI rendering assertions
 
 ## Debugging (Local tmux Plugin)
 
-tmuxプラグインとしてローカルでデバッグするには、ビルド成果物を tmux plugin ディレクトリへシンボリックリンクする。
+ローカルでデバッグするには、release ビルド後にビルド成果物を tmux plugin ディレクトリへコピーし、サイドバーを再起動する。
 
 ```bash
-ln -sf "$(pwd)/target/release/tmux-agent-sidebar" ~/.tmux/plugins/tmux-agent-sidebar/target/release/tmux-agent-sidebar
+cargo build --release
+cp target/release/tmux-agent-sidebar ~/.tmux/plugins/tmux-agent-sidebar/target/release/tmux-agent-sidebar
+# サイドバーを再起動（tmux のキーバインドで toggle off → on）
 ```
 
-**worktree で作業する場合**: worktree 内でビルドすると成果物は worktree 側の `target/release/` に出力される。symlink はリポジトリ本体の `target/release/` を指しているため、worktree のビルド成果物はリポジトリ本体の `target/release/` へコピーすること。
+**worktree で作業する場合**: worktree 内でビルドすると成果物は worktree 側の `target/release/` に出力される。コピー先は同じ。
 
 ```bash
-cp <worktree-path>/target/release/tmux-agent-sidebar <repo-root>/target/release/tmux-agent-sidebar
+cp <worktree-path>/target/release/tmux-agent-sidebar ~/.tmux/plugins/tmux-agent-sidebar/target/release/tmux-agent-sidebar
 ```
 
 ## Rust Edition
