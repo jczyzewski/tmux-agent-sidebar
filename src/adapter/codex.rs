@@ -1,0 +1,156 @@
+use crate::event::{AgentEvent, EventAdapter};
+use serde_json::Value;
+
+use super::json_str;
+
+pub struct CodexAdapter;
+
+impl EventAdapter for CodexAdapter {
+    fn parse(&self, event_name: &str, input: &Value) -> Option<AgentEvent> {
+        match event_name {
+            "session-start" => Some(AgentEvent::SessionStart {
+                agent: "codex".into(),
+                cwd: json_str(input, "cwd").into(),
+                permission_mode: json_str(input, "permission_mode").into(),
+            }),
+            "session-end" => Some(AgentEvent::SessionEnd),
+            "user-prompt-submit" => Some(AgentEvent::UserPromptSubmit {
+                agent: "codex".into(),
+                cwd: json_str(input, "cwd").into(),
+                permission_mode: json_str(input, "permission_mode").into(),
+                prompt: json_str(input, "prompt").into(),
+            }),
+            "stop" => Some(AgentEvent::Stop {
+                agent: "codex".into(),
+                cwd: json_str(input, "cwd").into(),
+                permission_mode: json_str(input, "permission_mode").into(),
+                last_message: json_str(input, "last_assistant_message").into(),
+                response: Some("{\"continue\":true}".into()),
+            }),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn session_start() {
+        let adapter = CodexAdapter;
+        let input = json!({"cwd": "/home/user"});
+        let event = adapter.parse("session-start", &input).unwrap();
+        assert_eq!(
+            event,
+            AgentEvent::SessionStart {
+                agent: "codex".into(),
+                cwd: "/home/user".into(),
+                permission_mode: "".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn session_end() {
+        let adapter = CodexAdapter;
+        assert_eq!(
+            adapter.parse("session-end", &json!({})).unwrap(),
+            AgentEvent::SessionEnd
+        );
+    }
+
+    #[test]
+    fn user_prompt_submit() {
+        let adapter = CodexAdapter;
+        let input = json!({"cwd": "/tmp", "prompt": "hello"});
+        let event = adapter.parse("user-prompt-submit", &input).unwrap();
+        assert_eq!(
+            event,
+            AgentEvent::UserPromptSubmit {
+                agent: "codex".into(),
+                cwd: "/tmp".into(),
+                permission_mode: "".into(),
+                prompt: "hello".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn stop_has_continue_response() {
+        let adapter = CodexAdapter;
+        let input = json!({"cwd": "/tmp", "last_assistant_message": "done"});
+        let event = adapter.parse("stop", &input).unwrap();
+        assert_eq!(
+            event,
+            AgentEvent::Stop {
+                agent: "codex".into(),
+                cwd: "/tmp".into(),
+                permission_mode: "".into(),
+                last_message: "done".into(),
+                response: Some("{\"continue\":true}".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn notification_not_supported() {
+        assert!(CodexAdapter.parse("notification", &json!({})).is_none());
+    }
+
+    #[test]
+    fn stop_failure_not_supported() {
+        assert!(CodexAdapter.parse("stop-failure", &json!({})).is_none());
+    }
+
+    #[test]
+    fn subagent_start_not_supported() {
+        assert!(CodexAdapter.parse("subagent-start", &json!({})).is_none());
+    }
+
+    #[test]
+    fn activity_log_not_supported() {
+        assert!(CodexAdapter.parse("activity-log", &json!({})).is_none());
+    }
+
+    #[test]
+    fn unknown_event_ignored() {
+        assert!(CodexAdapter.parse("something-else", &json!({})).is_none());
+    }
+
+    #[test]
+    fn stop_empty_fields() {
+        let adapter = CodexAdapter;
+        let event = adapter.parse("stop", &json!({})).unwrap();
+        assert_eq!(
+            event,
+            AgentEvent::Stop {
+                agent: "codex".into(),
+                cwd: "".into(),
+                permission_mode: "".into(),
+                last_message: "".into(),
+                response: Some("{\"continue\":true}".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn subagent_stop_not_supported() {
+        assert!(CodexAdapter.parse("subagent-stop", &json!({})).is_none());
+    }
+
+    #[test]
+    fn session_start_missing_fields_default_to_empty() {
+        let adapter = CodexAdapter;
+        let event = adapter.parse("session-start", &json!({})).unwrap();
+        assert_eq!(
+            event,
+            AgentEvent::SessionStart {
+                agent: "codex".into(),
+                cwd: "".into(),
+                permission_mode: "".into(),
+            }
+        );
+    }
+}

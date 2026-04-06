@@ -22,7 +22,7 @@ impl ActivityEntry {
             "LSP" => 146,                                       // soft teal
             "NotebookEdit" => 180,                              // soft yellow (like Edit)
             "AskUserQuestion" => 216,                           // soft orange
-            "CronCreate" | "CronDelete" | "CronList" => 151,    // soft mint
+            "CronCreate" | "CronDelete" | "CronList" | "RemoteTrigger" => 151, // soft mint
             "EnterPlanMode" | "ExitPlanMode" => 189,            // soft periwinkle
             "EnterWorktree" | "ExitWorktree" => 179,            // soft bronze
             "ToolSearch" => 250,                                // light gray

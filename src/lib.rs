@@ -1,5 +1,7 @@
 pub mod activity;
+pub mod adapter;
 pub mod cli;
+pub mod event;
 pub mod git;
 pub mod group;
 pub mod state;

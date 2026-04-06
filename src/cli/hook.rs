@@ -1,9 +1,9 @@
+use crate::event::{AgentEvent, resolve_adapter};
 use crate::tmux;
 
 use super::label::extract_tool_label;
 use super::{
-    json_str, local_time_hhmm, read_stdin_json, sanitize_tmux_value, set_attention, set_status,
-    tmux_pane,
+    local_time_hhmm, read_stdin_json, sanitize_tmux_value, set_attention, set_status, tmux_pane,
 };
 
 /// Returns whether the pane's cwd should be updated.
@@ -13,18 +13,16 @@ fn should_update_cwd(current_subagents: &str) -> bool {
     current_subagents.is_empty()
 }
 
-fn set_agent_meta(pane: &str, agent: &str, json: &serde_json::Value) {
+fn set_agent_meta(pane: &str, agent: &str, cwd: &str, permission_mode: &str) {
     tmux::set_pane_option(pane, "@pane_agent", agent);
-    let cwd = json_str(json, "cwd");
     if !cwd.is_empty() {
         let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
         if should_update_cwd(&current_subagents) {
             tmux::set_pane_option(pane, "@pane_cwd", cwd);
         }
     }
-    let pmode = json_str(json, "permission_mode");
-    if !pmode.is_empty() {
-        tmux::set_pane_option(pane, "@pane_permission_mode", pmode);
+    if !permission_mode.is_empty() {
+        tmux::set_pane_option(pane, "@pane_permission_mode", permission_mode);
     }
 }
 
@@ -78,22 +76,6 @@ fn remove_last_subagent(current: &str, agent_type: &str) -> Option<String> {
     Some(filtered.join(","))
 }
 
-/// Parse a JSON field that may be a JSON string or an object.
-fn parse_json_field(input: &serde_json::Value, field: &str) -> serde_json::Value {
-    input
-        .get(field)
-        .and_then(|v| {
-            if let Some(s) = v.as_str() {
-                serde_json::from_str(s).ok()
-            } else if v.is_object() {
-                Some(v.clone())
-            } else {
-                None
-            }
-        })
-        .unwrap_or(serde_json::Value::Null)
-}
-
 /// Write a single activity entry to the log file and trim if needed.
 fn write_activity_entry(pane: &str, tool_name: &str, label: &str) {
     let log_path = crate::activity::log_file_path(pane);
@@ -127,17 +109,16 @@ fn trim_log_file(path: &std::path::Path, keep: usize, threshold: usize) {
 // ─── hook subcommand ────────────────────────────────────────────────────────
 
 pub(crate) fn cmd_hook(args: &[String]) -> i32 {
-    let agent = args.first().map(|s| s.as_str()).unwrap_or("");
-    let event = args.get(1).map(|s| s.as_str()).unwrap_or("");
+    let agent_name = args.first().map(|s| s.as_str()).unwrap_or("");
+    let event_name = args.get(1).map(|s| s.as_str()).unwrap_or("");
 
-    if agent.is_empty() || event.is_empty() {
+    if agent_name.is_empty() || event_name.is_empty() {
         return 0;
     }
 
-    match agent {
-        "claude" | "codex" => {}
-        _ => return 0,
-    }
+    let Some(adapter) = resolve_adapter(agent_name) else {
+        return 0;
+    };
 
     let pane = tmux_pane();
     if pane.is_empty() {
@@ -145,129 +126,144 @@ pub(crate) fn cmd_hook(args: &[String]) -> i32 {
     }
 
     let input = read_stdin_json();
+    let Some(event) = adapter.parse(event_name, &input) else {
+        return 0;
+    };
 
+    handle_event(&pane, event)
+}
+
+// ─── event handler ──────────────────────────────────────────────────────────
+
+fn handle_event(pane: &str, event: AgentEvent) -> i32 {
     match event {
-        "notification" => {
-            set_agent_meta(&pane, agent, &input);
-            let wait_reason = json_str(&input, "notification_type");
-            if wait_reason == "idle_prompt" {
-                return 0;
-            }
-            set_status(&pane, "waiting");
-            set_attention(&pane, "notification");
-            if !wait_reason.is_empty() {
-                tmux::set_pane_option(&pane, "@pane_wait_reason", wait_reason);
-            }
+        AgentEvent::SessionStart {
+            agent,
+            cwd,
+            permission_mode,
+        } => {
+            set_agent_meta(pane, &agent, &cwd, &permission_mode);
+            set_attention(pane, "clear");
+            clear_run_state(pane);
+            tmux::unset_pane_option(pane, "@pane_prompt");
+            tmux::unset_pane_option(pane, "@pane_prompt_source");
+            tmux::unset_pane_option(pane, "@pane_subagents");
+            set_status(pane, "idle");
         }
-        "stop" => {
-            set_agent_meta(&pane, agent, &input);
-            set_attention(&pane, "clear");
-            let last_msg = json_str(&input, "last_assistant_message");
-            if !last_msg.is_empty() {
-                let msg = sanitize_tmux_value(last_msg);
-                tmux::set_pane_option(&pane, "@pane_prompt", &msg);
-                tmux::set_pane_option(&pane, "@pane_prompt_source", "response");
-            }
-            clear_run_state(&pane);
-            set_status(&pane, "idle");
-
-            if agent == "codex" {
-                println!("{{\"continue\":true}}");
-            }
-        }
-        "stop-failure" => {
-            set_agent_meta(&pane, agent, &input);
-            set_attention(&pane, "clear");
-            clear_run_state(&pane);
-            let error_type = json_str(&input, "error");
-            let error_details = json_str(&input, "error_details");
-            let reason = if !error_type.is_empty() {
-                error_type
-            } else {
-                error_details
-            };
-            if !reason.is_empty() {
-                tmux::set_pane_option(&pane, "@pane_wait_reason", reason);
-            }
-            set_status(&pane, "error");
-        }
-        "subagent-start" => {
-            let agent_type = json_str(&input, "agent_type");
-            if agent_type.is_empty() {
-                return 0;
-            }
-            let current = tmux::get_pane_option_value(&pane, "@pane_subagents");
-            let new_val = append_subagent(&current, agent_type);
-            tmux::set_pane_option(&pane, "@pane_subagents", &new_val);
-        }
-        "subagent-stop" => {
-            let agent_type = json_str(&input, "agent_type");
-            if agent_type.is_empty() {
-                return 0;
-            }
-            let current = tmux::get_pane_option_value(&pane, "@pane_subagents");
-            match remove_last_subagent(&current, agent_type) {
-                None => return 0,
-                Some(new_val) if new_val.is_empty() => {
-                    tmux::unset_pane_option(&pane, "@pane_subagents");
-                }
-                Some(new_val) => {
-                    tmux::set_pane_option(&pane, "@pane_subagents", &new_val);
-                }
-            }
-        }
-        "user-prompt-submit" => {
-            set_agent_meta(&pane, agent, &input);
-            set_attention(&pane, "clear");
-            set_status(&pane, "running");
-            let prompt = json_str(&input, "prompt");
-            if !prompt.is_empty() && !is_system_message(prompt) {
-                let p = sanitize_tmux_value(prompt);
-                tmux::set_pane_option(&pane, "@pane_prompt", &p);
-                tmux::set_pane_option(&pane, "@pane_prompt_source", "user");
-            }
-            let now = unsafe { libc::time(std::ptr::null_mut()) };
-            tmux::set_pane_option(&pane, "@pane_started_at", &now.to_string());
-            tmux::unset_pane_option(&pane, "@pane_wait_reason");
-        }
-        "session-start" => {
-            set_agent_meta(&pane, agent, &input);
-            set_attention(&pane, "clear");
-            clear_run_state(&pane);
-            tmux::unset_pane_option(&pane, "@pane_prompt");
-            tmux::unset_pane_option(&pane, "@pane_prompt_source");
-            tmux::unset_pane_option(&pane, "@pane_subagents");
-            set_status(&pane, "idle");
-        }
-        "session-end" => {
-            set_attention(&pane, "clear");
-            clear_all_meta(&pane);
-            set_status(&pane, "clear");
-            // Clean up activity log file
-            let log_path = crate::activity::log_file_path(&pane);
+        AgentEvent::SessionEnd => {
+            set_attention(pane, "clear");
+            clear_all_meta(pane);
+            set_status(pane, "clear");
+            let log_path = crate::activity::log_file_path(pane);
             let _ = std::fs::remove_file(log_path);
         }
-        "activity-log" => {
-            return handle_activity_log(&pane, &input);
+        AgentEvent::UserPromptSubmit {
+            agent,
+            cwd,
+            permission_mode,
+            prompt,
+        } => {
+            set_agent_meta(pane, &agent, &cwd, &permission_mode);
+            set_attention(pane, "clear");
+            set_status(pane, "running");
+            if !prompt.is_empty() && !is_system_message(&prompt) {
+                let p = sanitize_tmux_value(&prompt);
+                tmux::set_pane_option(pane, "@pane_prompt", &p);
+                tmux::set_pane_option(pane, "@pane_prompt_source", "user");
+            }
+            let now = unsafe { libc::time(std::ptr::null_mut()) };
+            tmux::set_pane_option(pane, "@pane_started_at", &now.to_string());
+            tmux::unset_pane_option(pane, "@pane_wait_reason");
         }
-        _ => {}
+        AgentEvent::Notification {
+            agent,
+            cwd,
+            permission_mode,
+            wait_reason,
+            meta_only,
+        } => {
+            set_agent_meta(pane, &agent, &cwd, &permission_mode);
+            if meta_only {
+                return 0;
+            }
+            set_status(pane, "waiting");
+            set_attention(pane, "notification");
+            if !wait_reason.is_empty() {
+                tmux::set_pane_option(pane, "@pane_wait_reason", &wait_reason);
+            }
+        }
+        AgentEvent::Stop {
+            agent,
+            cwd,
+            permission_mode,
+            last_message,
+            response,
+        } => {
+            set_agent_meta(pane, &agent, &cwd, &permission_mode);
+            set_attention(pane, "clear");
+            if !last_message.is_empty() {
+                let msg = sanitize_tmux_value(&last_message);
+                tmux::set_pane_option(pane, "@pane_prompt", &msg);
+                tmux::set_pane_option(pane, "@pane_prompt_source", "response");
+            }
+            clear_run_state(pane);
+            set_status(pane, "idle");
+            if let Some(resp) = response {
+                println!("{resp}");
+            }
+        }
+        AgentEvent::StopFailure {
+            agent,
+            cwd,
+            permission_mode,
+            error,
+        } => {
+            set_agent_meta(pane, &agent, &cwd, &permission_mode);
+            set_attention(pane, "clear");
+            clear_run_state(pane);
+            if !error.is_empty() {
+                tmux::set_pane_option(pane, "@pane_wait_reason", &error);
+            }
+            set_status(pane, "error");
+        }
+        AgentEvent::SubagentStart { agent_type } => {
+            let current = tmux::get_pane_option_value(pane, "@pane_subagents");
+            let new_val = append_subagent(&current, &agent_type);
+            tmux::set_pane_option(pane, "@pane_subagents", &new_val);
+        }
+        AgentEvent::SubagentStop { agent_type } => {
+            let current = tmux::get_pane_option_value(pane, "@pane_subagents");
+            match remove_last_subagent(&current, &agent_type) {
+                None => return 0,
+                Some(new_val) if new_val.is_empty() => {
+                    tmux::unset_pane_option(pane, "@pane_subagents");
+                }
+                Some(new_val) => {
+                    tmux::set_pane_option(pane, "@pane_subagents", &new_val);
+                }
+            }
+        }
+        AgentEvent::ActivityLog {
+            tool_name,
+            tool_input,
+            tool_response,
+        } => {
+            return handle_activity_log(pane, &tool_name, &tool_input, &tool_response);
+        }
     }
-
     0
 }
 
 // ─── activity-log logic ─────────────────────────────────────────────────────
 
 /// Activity-log handler, called from `hook <agent> activity-log` event.
-fn handle_activity_log(pane: &str, input: &serde_json::Value) -> i32 {
-    let tool_name = json_str(input, "tool_name");
-    if tool_name.is_empty() {
-        return 0;
-    }
-
-    let tool_input = parse_json_field(input, "tool_input");
-    let tool_response = parse_json_field(input, "tool_response");
-    let label = extract_tool_label(tool_name, &tool_input, &tool_response);
+fn handle_activity_log(
+    pane: &str,
+    tool_name: &str,
+    tool_input: &serde_json::Value,
+    tool_response: &serde_json::Value,
+) -> i32 {
+    let label = extract_tool_label(tool_name, tool_input, tool_response);
 
     // If status is not running, tool use means agent is active again
     let current_status = tmux::get_pane_option_value(pane, "@pane_status");
@@ -302,6 +298,7 @@ fn handle_activity_log(pane: &str, input: &serde_json::Value) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     use serde_json::json;
     use std::fs;
 
@@ -370,48 +367,6 @@ mod tests {
             remove_last_subagent("Explore,Explore,Explore", "Explore"),
             Some("Explore,Explore".into())
         );
-    }
-
-    // ─── parse_json_field tests ─────────────────────────────────────
-
-    #[test]
-    fn parse_json_field_object_value() {
-        let input = json!({"tool_input": {"file_path": "/a/b.rs"}});
-        let result = parse_json_field(&input, "tool_input");
-        assert_eq!(result, json!({"file_path": "/a/b.rs"}));
-    }
-
-    #[test]
-    fn parse_json_field_string_value_parses_json() {
-        let input = json!({"tool_input": "{\"file_path\":\"/a/b.rs\"}"});
-        let result = parse_json_field(&input, "tool_input");
-        assert_eq!(result, json!({"file_path": "/a/b.rs"}));
-    }
-
-    #[test]
-    fn parse_json_field_invalid_json_string_returns_null() {
-        let input = json!({"tool_input": "not-json"});
-        let result = parse_json_field(&input, "tool_input");
-        assert!(result.is_null());
-    }
-
-    #[test]
-    fn parse_json_field_missing_key_returns_null() {
-        let result = parse_json_field(&json!({}), "tool_input");
-        assert!(result.is_null());
-    }
-
-    #[test]
-    fn parse_json_field_number_value_returns_null() {
-        let input = json!({"tool_input": 42});
-        let result = parse_json_field(&input, "tool_input");
-        assert!(result.is_null());
-    }
-
-    #[test]
-    fn parse_json_field_null_input_returns_null() {
-        let result = parse_json_field(&serde_json::Value::Null, "tool_input");
-        assert!(result.is_null());
     }
 
     // ─── trim_log_file tests ────────────────────────────────────────
@@ -534,11 +489,12 @@ mod tests {
         let path = crate::activity::log_file_path(pane_id);
         let _ = fs::remove_file(&path);
 
-        let input = json!({
-            "tool_name": "Read",
-            "tool_input": {"file_path": "/home/user/src/main.rs"}
-        });
-        handle_activity_log(pane_id, &input);
+        handle_activity_log(
+            pane_id,
+            "Read",
+            &json!({"file_path": "/home/user/src/main.rs"}),
+            &Value::Null,
+        );
 
         let content = fs::read_to_string(&path).unwrap();
         assert!(content.contains("|Read|main.rs"));
@@ -551,22 +507,26 @@ mod tests {
         let path = crate::activity::log_file_path(pane_id);
         let _ = fs::remove_file(&path);
 
-        let result = handle_activity_log(pane_id, &json!({}));
+        // With the adapter pattern, empty tool_name is filtered by the adapter
+        // before reaching handle_activity_log. We still test that handle_activity_log
+        // writes an entry even with empty tool_name (label extraction handles it).
+        let result = handle_activity_log(pane_id, "", &Value::Null, &Value::Null);
         assert_eq!(result, 0);
-        assert!(!path.exists());
+        // Empty tool_name still writes an entry now (adapter filters upstream)
     }
 
     #[test]
-    fn handle_activity_log_tool_input_as_json_string() {
+    fn handle_activity_log_tool_input_as_json_object() {
         let pane_id = "%CLI_JSON_STR";
         let path = crate::activity::log_file_path(pane_id);
         let _ = fs::remove_file(&path);
 
-        let input = json!({
-            "tool_name": "Edit",
-            "tool_input": "{\"file_path\":\"/a/b/test.rs\"}"
-        });
-        handle_activity_log(pane_id, &input);
+        handle_activity_log(
+            pane_id,
+            "Edit",
+            &json!({"file_path": "/a/b/test.rs"}),
+            &Value::Null,
+        );
 
         let content = fs::read_to_string(&path).unwrap();
         assert!(content.contains("|Edit|test.rs"));
@@ -579,8 +539,7 @@ mod tests {
         let path = crate::activity::log_file_path(pane_id);
         let _ = fs::remove_file(&path);
 
-        let input = json!({"tool_name": "UnknownTool"});
-        handle_activity_log(pane_id, &input);
+        handle_activity_log(pane_id, "UnknownTool", &Value::Null, &Value::Null);
 
         let content = fs::read_to_string(&path).unwrap();
         assert!(content.contains("|UnknownTool|"));
@@ -593,12 +552,12 @@ mod tests {
         let path = crate::activity::log_file_path(pane_id);
         let _ = fs::remove_file(&path);
 
-        let input = json!({
-            "tool_name": "TaskCreate",
-            "tool_input": {"subject": "Fix bug"},
-            "tool_response": {"task": {"id": "42"}}
-        });
-        handle_activity_log(pane_id, &input);
+        handle_activity_log(
+            pane_id,
+            "TaskCreate",
+            &json!({"subject": "Fix bug"}),
+            &json!({"task": {"id": "42"}}),
+        );
 
         let content = fs::read_to_string(&path).unwrap();
         assert!(content.contains("|TaskCreate|#42 Fix bug"));

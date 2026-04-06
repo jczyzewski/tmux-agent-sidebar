@@ -37,10 +37,6 @@ fn read_stdin_json() -> serde_json::Value {
     serde_json::from_str(&buf).unwrap_or(serde_json::Value::Null)
 }
 
-fn json_str<'a>(val: &'a serde_json::Value, key: &str) -> &'a str {
-    val.get(key).and_then(|v| v.as_str()).unwrap_or("")
-}
-
 fn tmux_pane() -> String {
     std::env::var("TMUX_PANE").unwrap_or_default()
 }
@@ -99,6 +95,7 @@ fn cmd_set_status(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapter::json_str;
     use serde_json::json;
 
     // ─── run() dispatch tests ─────────────────────────────────────────
