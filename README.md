@@ -98,6 +98,9 @@ The sidebar receives status updates through agent hooks. Add the following hook 
 
 Add to your Claude Code hooks configuration (e.g. `~/.claude/settings.json`):
 
+<details>
+<summary>Claude Code hooks JSON</summary>
+
 ```json
 {
   "hooks": {
@@ -182,9 +185,14 @@ Add to your Claude Code hooks configuration (e.g. `~/.claude/settings.json`):
 }
 ```
 
+</details>
+
 #### 2.2 Codex
 
 Create or edit `~/.codex/hooks.json`:
+
+<details>
+<summary>Codex hooks JSON</summary>
 
 ```json
 {
@@ -224,7 +232,7 @@ Create or edit `~/.codex/hooks.json`:
 }
 ```
 
-> **Note:** Codex does not support `Notification` or `PostToolUse` hooks, so waiting status and activity logging are unavailable.
+</details>
 
 ## Usage
 
