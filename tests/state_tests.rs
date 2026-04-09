@@ -5,16 +5,16 @@ use test_helpers::*;
 use tmux_agent_sidebar::activity::ActivityEntry;
 use tmux_agent_sidebar::group::{PaneGitInfo, RepoGroup};
 use tmux_agent_sidebar::state::{
-    AgentFilter, AppState, BottomTab, Focus, GlobalState, RepoFilter, RowTarget,
+    StatusFilter, AppState, BottomTab, Focus, GlobalState, RepoFilter, RowTarget,
 };
 use tmux_agent_sidebar::tmux::{AgentType, PaneInfo, PaneStatus, SessionInfo, WindowInfo};
 
 // ─── State Transition Tests ────────────────────────────────────────
 
 #[test]
-fn test_move_agent_selection_bounds() {
+fn test_move_pane_selection_bounds() {
     let mut state = make_state(vec![]);
-    state.agent_row_targets = vec![
+    state.pane_row_targets = vec![
         RowTarget {
             pane_id: "%1".into(),
         },
@@ -22,22 +22,22 @@ fn test_move_agent_selection_bounds() {
             pane_id: "%2".into(),
         },
     ];
-    state.global.selected_agent_row = 0;
-    state.move_agent_selection(1);
-    assert_eq!(state.global.selected_agent_row, 1);
-    state.move_agent_selection(1); // should not go past end
-    assert_eq!(state.global.selected_agent_row, 1);
-    state.move_agent_selection(-1);
-    assert_eq!(state.global.selected_agent_row, 0);
-    state.move_agent_selection(-1); // should not go below 0
-    assert_eq!(state.global.selected_agent_row, 0);
+    state.global.selected_pane_row = 0;
+    state.move_pane_selection(1);
+    assert_eq!(state.global.selected_pane_row, 1);
+    state.move_pane_selection(1); // should not go past end
+    assert_eq!(state.global.selected_pane_row, 1);
+    state.move_pane_selection(-1);
+    assert_eq!(state.global.selected_pane_row, 0);
+    state.move_pane_selection(-1); // should not go below 0
+    assert_eq!(state.global.selected_pane_row, 0);
 }
 
 #[test]
-fn test_move_agent_selection_empty() {
+fn test_move_pane_selection_empty() {
     let mut state = make_state(vec![]);
-    state.move_agent_selection(1);
-    assert_eq!(state.global.selected_agent_row, 0);
+    state.move_pane_selection(1);
+    assert_eq!(state.global.selected_pane_row, 0);
 }
 
 #[test]
@@ -103,6 +103,7 @@ fn test_line_to_row_two_agents() {
         attention: false,
         agent: AgentType::Claude,
         path: "/home/user/project".into(),
+        current_command: String::new(),
         prompt: String::new(),
         prompt_is_response: false,
         started_at: None,
@@ -120,6 +121,7 @@ fn test_line_to_row_two_agents() {
         attention: false,
         agent: AgentType::Codex,
         path: "/home/user/project".into(),
+        current_command: String::new(),
         prompt: String::new(),
         prompt_is_response: false,
         started_at: None,
@@ -221,18 +223,18 @@ fn test_rebuild_row_targets_clamps_selection() {
             (p2.clone(), PaneGitInfo::default()),
         ],
     }];
-    state.global.selected_agent_row = 1; // select second agent
+    state.global.selected_pane_row = 1; // select second agent
 
     // Trigger rebuild
     state.rebuild_row_targets();
-    assert_eq!(state.agent_row_targets.len(), 2);
+    assert_eq!(state.pane_row_targets.len(), 2);
 
     // Now shrink to 1 agent
     state.repo_groups[0].panes.pop();
-    state.global.selected_agent_row = 1; // still pointing at index 1
+    state.global.selected_pane_row = 1; // still pointing at index 1
     state.rebuild_row_targets();
     // Should be clamped to 0
-    assert_eq!(state.global.selected_agent_row, 0);
+    assert_eq!(state.global.selected_pane_row, 0);
 }
 
 // find_focused_pane now queries tmux directly, so it can't be tested
@@ -326,28 +328,28 @@ fn test_state_new_defaults() {
     assert_eq!(state.tmux_pane, "%99");
     assert!(state.sessions.is_empty());
     assert!(!state.sidebar_focused);
-    assert_eq!(state.focus, Focus::Agents);
+    assert_eq!(state.focus, Focus::Panes);
     assert_eq!(state.spinner_frame, 0);
-    assert_eq!(state.global.selected_agent_row, 0);
-    assert!(state.agent_row_targets.is_empty());
+    assert_eq!(state.global.selected_pane_row, 0);
+    assert!(state.pane_row_targets.is_empty());
     assert!(state.activity_entries.is_empty());
     assert_eq!(state.activity_scroll.offset, 0);
     assert_eq!(state.activity_max_entries, 50);
-    assert_eq!(state.agents_scroll.offset, 0);
-    assert_eq!(state.agents_scroll.total_lines, 0);
-    assert_eq!(state.agents_scroll.visible_height, 0);
+    assert_eq!(state.panes_scroll.offset, 0);
+    assert_eq!(state.panes_scroll.total_lines, 0);
+    assert_eq!(state.panes_scroll.visible_height, 0);
     assert_eq!(state.bottom_tab, BottomTab::Activity);
     assert!(state.git.branch.is_empty());
     assert_eq!(state.git_scroll.offset, 0);
     assert!(state.git.pr_number.is_none());
 }
 
-// ─── State: move_agent_selection return value Tests ─────────────────
+// ─── State: move_pane_selection return value Tests ─────────────────
 
 #[test]
-fn test_move_agent_selection_return_value() {
+fn test_move_pane_selection_return_value() {
     let mut state = make_state(vec![]);
-    state.agent_row_targets = vec![
+    state.pane_row_targets = vec![
         RowTarget {
             pane_id: "%1".into(),
         },
@@ -355,22 +357,22 @@ fn test_move_agent_selection_return_value() {
             pane_id: "%2".into(),
         },
     ];
-    state.global.selected_agent_row = 0;
+    state.global.selected_pane_row = 0;
 
     assert!(
-        state.move_agent_selection(1),
+        state.move_pane_selection(1),
         "should return true when moved"
     );
     assert!(
-        !state.move_agent_selection(1),
+        !state.move_pane_selection(1),
         "should return false at boundary"
     );
     assert!(
-        state.move_agent_selection(-1),
+        state.move_pane_selection(-1),
         "should return true when moved back"
     );
     assert!(
-        !state.move_agent_selection(-1),
+        !state.move_pane_selection(-1),
         "should return false at start"
     );
 }
@@ -458,7 +460,7 @@ fn test_git_tab_active_after_tab_switch() {
 
 #[test]
 fn test_filter_change_rebuilds_row_targets() {
-    use tmux_agent_sidebar::state::AgentFilter;
+    use tmux_agent_sidebar::state::StatusFilter;
 
     let running_pane = PaneInfo {
         pane_id: "%1".into(),
@@ -474,37 +476,37 @@ fn test_filter_change_rebuilds_row_targets() {
     state.repo_groups = vec![make_repo_group("project", vec![running_pane, idle_pane])];
 
     // All filter shows both
-    state.global.agent_filter = AgentFilter::All;
+    state.global.status_filter = StatusFilter::All;
     state.rebuild_row_targets();
-    assert_eq!(state.agent_row_targets.len(), 2);
+    assert_eq!(state.pane_row_targets.len(), 2);
 
     // Simulates sync_global_state setting filter to Running
-    state.global.agent_filter = AgentFilter::Running;
+    state.global.status_filter = StatusFilter::Running;
     state.rebuild_row_targets();
-    assert_eq!(state.agent_row_targets.len(), 1);
-    assert_eq!(state.agent_row_targets[0].pane_id, "%1");
+    assert_eq!(state.pane_row_targets.len(), 1);
+    assert_eq!(state.pane_row_targets[0].pane_id, "%1");
 
     // Simulates sync_global_state setting filter to Idle
-    state.global.agent_filter = AgentFilter::Idle;
+    state.global.status_filter = StatusFilter::Idle;
     state.rebuild_row_targets();
-    assert_eq!(state.agent_row_targets.len(), 1);
-    assert_eq!(state.agent_row_targets[0].pane_id, "%2");
+    assert_eq!(state.pane_row_targets.len(), 1);
+    assert_eq!(state.pane_row_targets[0].pane_id, "%2");
 }
 
 #[test]
 fn test_cursor_sync_clamped_by_rebuild() {
-    use tmux_agent_sidebar::state::AgentFilter;
+    use tmux_agent_sidebar::state::StatusFilter;
 
     let pane = make_pane(AgentType::Claude, PaneStatus::Running);
     let mut state = make_state(vec![]);
     state.repo_groups = vec![make_repo_group("project", vec![pane])];
 
     // Simulates sync_global_state setting cursor beyond bounds
-    state.global.selected_agent_row = 5;
-    state.global.agent_filter = AgentFilter::All;
+    state.global.selected_pane_row = 5;
+    state.global.status_filter = StatusFilter::All;
     state.rebuild_row_targets();
     // Should be clamped to last valid index
-    assert_eq!(state.global.selected_agent_row, 0);
+    assert_eq!(state.global.selected_pane_row, 0);
 }
 
 // ─── GlobalState tests ──────────────────────────────────────────────
@@ -525,14 +527,14 @@ fn make_global() -> GlobalState {
 #[test]
 fn full_sync_ignores_tmux_filter_matching_last_saved() {
     let mut g = make_global();
-    g.agent_filter = AgentFilter::Running;
+    g.status_filter = StatusFilter::Running;
 
     let opts = make_opts(&[("@sidebar_filter", "all")]);
     g.apply_all(&opts);
 
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Running,
+        g.status_filter,
+        StatusFilter::Running,
         "local filter change should not be overwritten when tmux matches last_saved"
     );
 }
@@ -544,7 +546,7 @@ fn full_sync_applies_filter_from_tmux() {
     let opts = make_opts(&[("@sidebar_filter", "waiting")]);
     g.apply_all(&opts);
 
-    assert_eq!(g.agent_filter, AgentFilter::Waiting);
+    assert_eq!(g.status_filter, StatusFilter::Waiting);
 }
 
 #[test]
@@ -554,19 +556,19 @@ fn full_sync_applies_cursor_from_tmux() {
     let opts = make_opts(&[("@sidebar_cursor", "3")]);
     g.apply_all(&opts);
 
-    assert_eq!(g.selected_agent_row, 3);
+    assert_eq!(g.selected_pane_row, 3);
 }
 
 #[test]
 fn full_sync_ignores_cursor_matching_last_saved() {
     let mut g = make_global();
-    g.selected_agent_row = 5;
+    g.selected_pane_row = 5;
 
     let opts = make_opts(&[("@sidebar_cursor", "0")]);
     g.apply_all(&opts);
 
     assert_eq!(
-        g.selected_agent_row, 5,
+        g.selected_pane_row, 5,
         "should not overwrite local cursor when tmux matches last_saved"
     );
 }
@@ -584,15 +586,15 @@ fn full_sync_applies_repo_filter_from_tmux() {
 #[test]
 fn full_sync_empty_opts_changes_nothing() {
     let mut g = make_global();
-    g.agent_filter = AgentFilter::Running;
+    g.status_filter = StatusFilter::Running;
     g.repo_filter = RepoFilter::Repo("app".into());
-    g.selected_agent_row = 2;
+    g.selected_pane_row = 2;
 
     g.apply_all(&std::collections::HashMap::new());
 
-    assert_eq!(g.agent_filter, AgentFilter::Running);
+    assert_eq!(g.status_filter, StatusFilter::Running);
     assert_eq!(g.repo_filter, RepoFilter::Repo("app".into()));
-    assert_eq!(g.selected_agent_row, 2);
+    assert_eq!(g.selected_pane_row, 2);
 }
 
 #[test]
@@ -602,21 +604,21 @@ fn full_sync_applies_error_filter_from_tmux() {
     let opts = make_opts(&[("@sidebar_filter", "error")]);
     g.apply_all(&opts);
 
-    assert_eq!(g.agent_filter, AgentFilter::Error);
+    assert_eq!(g.status_filter, StatusFilter::Error);
 }
 
 #[test]
 fn full_sync_invalid_filter_defaults_to_all() {
     let mut g = make_global();
-    g.agent_filter = AgentFilter::Running;
+    g.status_filter = StatusFilter::Running;
 
     // "garbage" parses as All, All == last_saved → no change
     let opts = make_opts(&[("@sidebar_filter", "garbage")]);
     g.apply_all(&opts);
 
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Running,
+        g.status_filter,
+        StatusFilter::Running,
         "invalid filter string parsed as All should match last_saved and not overwrite"
     );
 }
@@ -632,8 +634,8 @@ fn full_sync_applies_all_three_from_tmux() {
     ]);
     g.apply_all(&opts);
 
-    assert_eq!(g.agent_filter, AgentFilter::Error);
-    assert_eq!(g.selected_agent_row, 7);
+    assert_eq!(g.status_filter, StatusFilter::Error);
+    assert_eq!(g.selected_pane_row, 7);
     assert_eq!(g.repo_filter, RepoFilter::Repo("my-app".into()));
 }
 
@@ -650,18 +652,18 @@ fn sync_does_not_revert_filter_after_save_failure() {
 
     // Step 1: startup sync adopts "error" from tmux
     g.apply_all(&make_opts(&[("@sidebar_filter", "error")]));
-    assert_eq!(g.agent_filter, AgentFilter::Error);
+    assert_eq!(g.status_filter, StatusFilter::Error);
 
     // Step 2: user changes filter locally, save_filter fails
     // (last_saved_filter stays Error)
-    g.agent_filter = AgentFilter::Running;
+    g.status_filter = StatusFilter::Running;
 
     // Step 3: next sync reads tmux "error", but last_saved is also Error → equal → no change
     g.apply_all(&make_opts(&[("@sidebar_filter", "error")]));
 
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Running,
+        g.status_filter,
+        StatusFilter::Running,
         "sync must not revert filter when save failed — the original bug scenario"
     );
 }
@@ -674,19 +676,19 @@ fn full_sync_does_not_revert_filter_after_save_failure() {
 
     // Startup: adopt "error"
     g.apply_all(&make_opts(&[("@sidebar_filter", "error")]));
-    assert_eq!(g.agent_filter, AgentFilter::Error);
+    assert_eq!(g.status_filter, StatusFilter::Error);
 
     // User changes filter locally, save_filter fails
     // (last_saved_filter stays Error)
-    g.agent_filter = AgentFilter::Running;
+    g.status_filter = StatusFilter::Running;
 
     // SIGUSR1 triggers apply_all: tmux still has "error",
     // but last_saved is also Error → equal → no overwrite
     g.apply_all(&make_opts(&[("@sidebar_filter", "error")]));
 
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Running,
+        g.status_filter,
+        StatusFilter::Running,
         "full sync must not revert filter when save failed"
     );
 }
@@ -699,7 +701,7 @@ fn full_sync_picks_up_change_from_another_instance() {
 
     // Startup: this instance starts with default (All)
     g.apply_all(&make_opts(&[("@sidebar_filter", "running")]));
-    assert_eq!(g.agent_filter, AgentFilter::Running);
+    assert_eq!(g.status_filter, StatusFilter::Running);
     // last_saved_filter is now Running
 
     // Another instance changes filter to Waiting (writes to tmux)
@@ -707,8 +709,8 @@ fn full_sync_picks_up_change_from_another_instance() {
     g.apply_all(&make_opts(&[("@sidebar_filter", "waiting")]));
 
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Waiting,
+        g.status_filter,
+        StatusFilter::Waiting,
         "SIGUSR1 should pick up filter changed by another instance"
     );
 }
@@ -718,14 +720,14 @@ fn full_sync_picks_up_cursor_from_another_instance() {
     let mut g = make_global();
 
     g.apply_all(&make_opts(&[("@sidebar_cursor", "3")]));
-    assert_eq!(g.selected_agent_row, 3);
+    assert_eq!(g.selected_pane_row, 3);
     // last_saved_cursor is now 3
 
     // Another instance moves cursor to 7
     g.apply_all(&make_opts(&[("@sidebar_cursor", "7")]));
 
     assert_eq!(
-        g.selected_agent_row, 7,
+        g.selected_pane_row, 7,
         "SIGUSR1 should pick up cursor changed by another instance"
     );
 }
@@ -743,12 +745,12 @@ fn global_state_stable_during_task_completion() {
     let mut g = make_global();
 
     g.apply_all(&make_opts(&[("@sidebar_filter", "running")]));
-    g.agent_filter = AgentFilter::Idle;
+    g.status_filter = StatusFilter::Idle;
 
     // No apply_all called during task completion (window still active).
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Idle,
+        g.status_filter,
+        StatusFilter::Idle,
         "filter must not change during task completion (window stayed active)"
     );
 }
@@ -760,15 +762,15 @@ fn window_switch_syncs_after_debounce() {
     let mut g = make_global();
 
     g.apply_all(&make_opts(&[("@sidebar_filter", "running")]));
-    assert_eq!(g.agent_filter, AgentFilter::Running);
+    assert_eq!(g.status_filter, StatusFilter::Running);
 
     // User returns to this window after being away.
     // Debounce passed (inactive_count >= 2) → apply_all called.
     g.apply_all(&make_opts(&[("@sidebar_filter", "waiting")]));
 
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Waiting,
+        g.status_filter,
+        StatusFilter::Waiting,
         "window activation after debounce should sync filter"
     );
 }
@@ -783,13 +785,13 @@ fn window_active_flicker_does_not_trigger_sync() {
     let mut g = make_global();
 
     g.apply_all(&make_opts(&[("@sidebar_filter", "running")]));
-    g.agent_filter = AgentFilter::Idle;
+    g.status_filter = StatusFilter::Idle;
 
     // Flicker: only 1 cycle of inactive (count=1 < threshold=2).
     // Main loop would NOT call apply_all. State stays local.
     assert_eq!(
-        g.agent_filter,
-        AgentFilter::Idle,
+        g.status_filter,
+        StatusFilter::Idle,
         "1-cycle flicker must not trigger sync"
     );
 }
@@ -805,7 +807,7 @@ fn window_activation_syncs_all_fields() {
         ("@sidebar_repo_filter", "my-app"),
     ]));
 
-    assert_eq!(g.agent_filter, AgentFilter::Idle);
-    assert_eq!(g.selected_agent_row, 4);
+    assert_eq!(g.status_filter, StatusFilter::Idle);
+    assert_eq!(g.selected_pane_row, 4);
     assert_eq!(g.repo_filter, RepoFilter::Repo("my-app".into()));
 }

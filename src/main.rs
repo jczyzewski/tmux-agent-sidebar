@@ -155,15 +155,15 @@ fn run_app(
                     Event::Key(key) => match key.code {
                         KeyCode::Esc => {
                             if state.focus == Focus::ActivityLog || state.focus == Focus::Filter {
-                                state.focus = Focus::Agents;
+                                state.focus = Focus::Panes;
                             }
                         }
                         KeyCode::Char('j') | KeyCode::Down => match state.focus {
                             Focus::Filter => {
-                                state.focus = Focus::Agents;
+                                state.focus = Focus::Panes;
                             }
-                            Focus::Agents => {
-                                if state.move_agent_selection(1) {
+                            Focus::Panes => {
+                                if state.move_pane_selection(1) {
                                     state.global.save_cursor();
                                 } else {
                                     state.focus = Focus::ActivityLog;
@@ -173,8 +173,8 @@ fn run_app(
                         },
                         KeyCode::Char('k') | KeyCode::Up => match state.focus {
                             Focus::Filter => {}
-                            Focus::Agents => {
-                                if state.move_agent_selection(-1) {
+                            Focus::Panes => {
+                                if state.move_pane_selection(-1) {
                                     state.global.save_cursor();
                                 } else {
                                     state.focus = Focus::Filter;
@@ -190,7 +190,7 @@ fn run_app(
                                     }
                                 };
                                 if at_top {
-                                    state.focus = Focus::Agents;
+                                    state.focus = Focus::Panes;
                                 } else {
                                     state.scroll_bottom(-1);
                                 }
@@ -198,14 +198,14 @@ fn run_app(
                         },
                         KeyCode::Char('h') | KeyCode::Left => {
                             if state.focus == Focus::Filter {
-                                state.global.agent_filter = state.global.agent_filter.prev();
+                                state.global.status_filter = state.global.status_filter.prev();
                                 state.global.save_filter();
                                 state.rebuild_row_targets();
                             }
                         }
                         KeyCode::Char('l') | KeyCode::Right => {
                             if state.focus == Focus::Filter {
-                                state.global.agent_filter = state.global.agent_filter.next();
+                                state.global.status_filter = state.global.status_filter.next();
                                 state.global.save_filter();
                                 state.rebuild_row_targets();
                             }
@@ -216,12 +216,12 @@ fn run_app(
                             }
                         }
                         KeyCode::Enter => {
-                            if state.focus == Focus::Agents {
-                                state.activate_selection();
+                            if state.focus == Focus::Panes {
+                                state.activate_selected_pane();
                             }
                         }
                         KeyCode::Tab => {
-                            state.global.agent_filter = state.global.agent_filter.next();
+                            state.global.status_filter = state.global.status_filter.next();
                             state.global.save_filter();
                             state.rebuild_row_targets();
                         }

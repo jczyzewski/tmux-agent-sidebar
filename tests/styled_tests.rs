@@ -24,7 +24,7 @@ fn snapshot_selected_focused_styled() {
     state.repo_groups = vec![make_repo_group("project", vec![pane])];
     state.rebuild_row_targets();
     state.sidebar_focused = true;
-    state.global.selected_agent_row = 0;
+    state.global.selected_pane_row = 0;
 
     let output = render_to_styled_string(&mut state, 28, 24);
     // Verify output contains selection background style with selection_bg color (236)
@@ -80,7 +80,7 @@ fn snapshot_activity_unfocused_styled() {
     }]);
     state.repo_groups = vec![make_repo_group("project", vec![pane])];
     state.rebuild_row_targets();
-    state.focus = Focus::Agents; // not activity
+    state.focus = Focus::Panes; // not activity
     state.sidebar_focused = true;
     state.activity_entries = vec![ActivityEntry {
         timestamp: "10:32".into(),
@@ -114,8 +114,8 @@ fn selection_bg_does_not_bleed_into_border() {
     state.repo_groups = vec![make_repo_group("project", vec![pane])];
     state.rebuild_row_targets();
     state.sidebar_focused = true;
-    state.focus = Focus::Agents;
-    state.global.selected_agent_row = 0;
+    state.focus = Focus::Panes;
+    state.global.selected_pane_row = 0;
 
     let output = render_to_styled_string(&mut state, 28, 24);
 
@@ -165,8 +165,8 @@ fn selection_bg_covers_inner_padding() {
     state.repo_groups = vec![make_repo_group("project", vec![pane])];
     state.rebuild_row_targets();
     state.sidebar_focused = true;
-    state.focus = Focus::Agents;
-    state.global.selected_agent_row = 0;
+    state.focus = Focus::Panes;
+    state.global.selected_pane_row = 0;
 
     let output = render_to_styled_string(&mut state, 28, 24);
 

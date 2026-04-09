@@ -10,8 +10,8 @@ Stored in `GlobalState`. Written to tmux on change, reloaded on SIGUSR1.
 
 | Field | Tmux Variable | Update Trigger | Description |
 |-------|--------------|----------------|-------------|
-| `agent_filter` | `@sidebar_filter` | User input (left/right key) | Active status filter (All/Running/Waiting/Idle/Error) |
-| `selected_agent_row` | `@sidebar_cursor` | User input (j/k key) | Cursor position in agent list |
+| `status_filter` | `@sidebar_filter` | User input (left/right key) | Active status filter (All/Running/Waiting/Idle/Error) |
+| `selected_pane_row` | `@sidebar_cursor` | User input (j/k key) | Cursor position in agent list |
 | `repo_filter` | `@sidebar_repo_filter` | User input (repo popup) | Repository filter (All or specific repo) |
 
 Each field has a corresponding `last_saved_*` to prevent sync conflicts — only overwrites tmux if the local write succeeded.
@@ -25,7 +25,7 @@ Each pane's runtime data is split into two buckets:
 | Source | Update Trigger | Description |
 |--------|----------------|-------------|
 | tmux pane options | Event-driven + cleanup on agent exit | Agent type, status, cwd, permission mode, prompt, subagents, worktree, etc. |
-| `PaneRuntimeState` in `AppState` | Refresh cycle + cleanup on agent exit | `ports`, `task_progress`, `task_dismissed_total`, `inactive_since` |
+| `PaneRuntimeState` in `AppState` | Refresh cycle + cleanup on agent exit | `ports`, `command`, `task_progress`, `task_dismissed_total`, `inactive_since` |
 
 Pane options written to tmux:
 
@@ -49,6 +49,7 @@ In-memory per-pane runtime state:
 | Field | Update Frequency | Description |
 |-------|-----------------|-------------|
 | `pane_states[...].ports` | Every 10s (port scan) | Listening localhost ports detected from the pane process tree |
+| `pane_states[...].command` | Every 10s (port scan) | Best-effort commandline for the pane process tree, with tmux command fallback in the UI |
 | `pane_states[...].task_progress` | Every 1s (refresh cycle) | Parsed from activity log — task list per pane |
 | `pane_states[...].task_dismissed_total` | On task completion | Tracks dismissed completed-task counts |
 | `pane_states[...].inactive_since` | On status change | Debounce timestamp (3s grace before hiding tasks) |
@@ -69,9 +70,9 @@ Per-pane file-based state:
 | `focused_pane_id` | Every 1s | Currently focused agent pane |
 | `sidebar_focused` | Every 1s | Whether sidebar pane itself has focus |
 | `now` | Every 1s | Current Unix epoch |
-| `agent_row_targets` | Every 1s | Filtered pane list after applying filters |
+| `pane_row_targets` | Every 1s | Filtered pane list after applying filters |
 | `focus` | On user input | UI focus: `Filter` / `Agents` / `ActivityLog` |
-| `agents_scroll` | On user input / render | Agent list scroll position |
+| `panes_scroll` | On user input / render | Agent list scroll position |
 | `activity_scroll` | On user input / render | Activity log scroll position |
 | `git_scroll` | On user input / render | Git status scroll position |
 | `activity_entries` | Every 1s | Focused pane's activity entries (max 50) |
@@ -105,7 +106,7 @@ Per-pane file-based state:
 │  line_to_row, scroll dimensions, cat animation              │
 ├─────────────────────────────────────────────────────────────┤
 │  Every 1s (refresh cycle)                                   │
-│  sessions, repo_groups, focused_pane_id, agent_row_targets, │
+│  sessions, repo_groups, focused_pane_id, pane_row_targets, │
 │  activity_entries, pane_states.task_progress                │
 ├─────────────────────────────────────────────────────────────┤
 │  Every 10s (port scan)                                      │
@@ -160,7 +161,7 @@ TUI main loop (main.rs)
 
 ```rust
 enum Focus { Filter, Agents, ActivityLog }
-enum AgentFilter { All, Running, Waiting, Idle, Error }
+enum StatusFilter { All, Running, Waiting, Idle, Error }
 enum RepoFilter { All, Repo(String) }
 enum BottomTab { Activity, GitStatus }
 enum PaneStatus { Running, Waiting, Idle, Error, Unknown }
@@ -183,6 +184,7 @@ struct HyperlinkOverlay {
 
 struct PaneRuntimeState {
     ports: Vec<u16>,
+    command: Option<String>,
     task_progress: Option<TaskProgress>,
     task_dismissed_total: Option<usize>,
     inactive_since: Option<u64>,
@@ -193,7 +195,7 @@ struct PaneRuntimeState {
 
 ## State Invariants
 
-1. `selected_agent_row` is always < `agent_row_targets.len()` — clamped in `rebuild_row_targets()`
+1. `selected_pane_row` is always < `pane_row_targets.len()` — clamped in `rebuild_row_targets()`
 2. `activity_entries` contains only the focused pane's entries — cleared on focus change
 3. Tab preferences persist per pane ID in `pane_tab_prefs` — restored on focus change
 4. Git fetching respects the `git_tab_active` flag — stops when tab is hidden

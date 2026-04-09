@@ -6,6 +6,7 @@ use crate::tmux::{AgentType, SessionInfo};
 #[derive(Debug, Default, Clone)]
 pub struct PaneProcessSnapshot {
     pub ports_by_pane: HashMap<String, Vec<u16>>,
+    pub command_by_pane: HashMap<String, String>,
     pub live_agent_panes: HashSet<String>,
 }
 
@@ -100,6 +101,57 @@ fn process_matches_agent(args: &str, agent_name: &str) -> bool {
     basename == agent_name
 }
 
+fn process_basename(args: &str) -> Option<&str> {
+    let command = args.split_whitespace().next()?;
+    let command = command.trim_matches('"');
+    Some(command.rsplit('/').next().unwrap_or(command))
+}
+
+fn is_shell_command(basename: &str) -> bool {
+    matches!(
+        basename,
+        "bash" | "sh" | "zsh" | "fish" | "tmux" | "login" | "sudo"
+    )
+}
+
+fn best_command_for_pane(
+    pane_pid: u32,
+    children_of: &HashMap<u32, Vec<u32>>,
+    args_by_pid: &HashMap<u32, String>,
+) -> Option<String> {
+    let descendants = descendant_pids(&[pane_pid], children_of);
+    let mut leaf_candidates: Vec<(usize, String)> = Vec::new();
+    let mut fallback_candidates: Vec<(usize, String)> = Vec::new();
+
+    for pid in descendants {
+        let Some(args) = args_by_pid.get(&pid) else {
+            continue;
+        };
+        let Some(basename) = process_basename(args) else {
+            continue;
+        };
+        if basename.is_empty() || is_shell_command(basename) {
+            continue;
+        }
+        let candidate = args.trim().to_string();
+        let len = candidate.len();
+        let is_leaf = children_of.get(&pid).map_or(true, |children| children.is_empty());
+        if is_leaf {
+            leaf_candidates.push((len, candidate));
+        } else {
+            fallback_candidates.push((len, candidate));
+        }
+    }
+
+    leaf_candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    if let Some((_, command)) = leaf_candidates.into_iter().next() {
+        return Some(command);
+    }
+
+    fallback_candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    fallback_candidates.into_iter().next().map(|(_, command)| command)
+}
+
 fn extract_port(name: &str) -> Option<u16> {
     let trimmed = name.trim();
     let (_, tail) = trimmed.rsplit_once(':')?;
@@ -146,6 +198,7 @@ pub fn scan_session_process_snapshot(sessions: &[SessionInfo]) -> Option<PanePro
 
     let mut pid_to_panes: HashMap<u32, Vec<String>> = HashMap::new();
     let mut live_agent_panes: HashSet<String> = HashSet::new();
+    let mut command_by_pane: HashMap<String, String> = HashMap::new();
     for session in sessions {
         for window in &session.windows {
             for pane in &window.panes {
@@ -155,6 +208,9 @@ pub fn scan_session_process_snapshot(sessions: &[SessionInfo]) -> Option<PanePro
                 let descendant_set = descendant_pids(&[pane_pid], &children_of);
                 if process_tree_has_agent(&[pane_pid], &children_of, &args_by_pid, &pane.agent) {
                     live_agent_panes.insert(pane.pane_id.clone());
+                }
+                if let Some(command) = best_command_for_pane(pane_pid, &children_of, &args_by_pid) {
+                    command_by_pane.insert(pane.pane_id.clone(), command);
                 }
                 for pid in descendant_set {
                     pid_to_panes
@@ -189,6 +245,7 @@ pub fn scan_session_process_snapshot(sessions: &[SessionInfo]) -> Option<PanePro
             .into_iter()
             .map(|(pane_id, ports)| (pane_id, ports.into_iter().collect()))
             .collect(),
+        command_by_pane,
         live_agent_panes,
     })
 }
@@ -220,6 +277,19 @@ mod tests {
             parse_lsof_listening_ports(sample),
             vec![(123, 3000), (456, 5173)]
         );
+    }
+
+    #[test]
+    fn best_command_for_pane_prefers_leaf_non_shell_command() {
+        let children = HashMap::from([(10, vec![11, 12]), (11, vec![]), (12, vec![])]);
+        let args = HashMap::from([
+            (10, "zsh".to_string()),
+            (11, "/usr/bin/node /tmp/server.js --port 3000".to_string()),
+            (12, "/usr/bin/git status".to_string()),
+        ]);
+
+        let command = best_command_for_pane(10, &children, &args).unwrap();
+        assert_eq!(command, "/usr/bin/node /tmp/server.js --port 3000");
     }
 
     #[test]

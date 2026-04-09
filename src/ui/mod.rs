@@ -1,4 +1,4 @@
-pub mod agents;
+pub mod panes;
 pub mod bottom;
 pub mod cat;
 pub mod colors;
@@ -34,7 +34,7 @@ pub fn draw(frame: &mut Frame, state: &mut AppState) {
         })
         .split(area);
 
-    agents::draw_agents(frame, state, chunks[0]);
+    panes::draw_agents(frame, state, chunks[0]);
 
     if bot_h > 0 && chunks.len() > 2 {
         bottom::draw_bottom(frame, state, chunks[2]);

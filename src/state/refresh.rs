@@ -134,7 +134,7 @@ impl AppState {
         {
             let scanned = crate::port::scan_session_process_snapshot(sessions)?;
             let mut active_ids: HashSet<String> = HashSet::new();
-            let mut updates: Vec<(String, Vec<u16>)> = Vec::new();
+            let mut updates: Vec<(String, Vec<u16>, Option<String>)> = Vec::new();
             let mut dead_panes: Vec<String> = Vec::new();
             for session in sessions {
                 for window in &session.windows {
@@ -150,12 +150,15 @@ impl AppState {
                                 .get(&pane.pane_id)
                                 .cloned()
                                 .unwrap_or_default(),
+                            scanned.command_by_pane.get(&pane.pane_id).cloned(),
                         ));
                     }
                 }
             }
-            for (pane_id, ports) in updates {
-                self.pane_state_mut(&pane_id).ports = ports;
+            for (pane_id, ports, command) in updates {
+                let pane_state = self.pane_state_mut(&pane_id);
+                pane_state.ports = ports;
+                pane_state.command = command;
             }
             for pane_id in dead_panes {
                 Self::clear_dead_agent_metadata(&pane_id);
@@ -267,6 +270,7 @@ mod tests {
             attention: false,
             agent: AgentType::Claude,
             path: "/tmp".into(),
+            current_command: String::new(),
             prompt: String::new(),
             prompt_is_response: false,
             started_at: None,

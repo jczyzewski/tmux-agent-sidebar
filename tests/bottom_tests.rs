@@ -95,7 +95,7 @@ fn snapshot_git_status_tab_ui() {
     state.git.unstaged_files = vec![
         tmux_agent_sidebar::git::GitFileEntry {
             status: 'M',
-            name: "src/ui/agents.rs".into(),
+            name: "src/ui/panes.rs".into(),
             additions: 30,
             deletions: 10,
         },

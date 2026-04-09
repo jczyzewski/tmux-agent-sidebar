@@ -11,6 +11,7 @@ pub struct PaneInfo {
     pub attention: bool,
     pub agent: AgentType,
     pub path: String,
+    pub current_command: String,
     pub prompt: String,
     pub prompt_is_response: bool,
     pub started_at: Option<u64>,
@@ -266,6 +267,7 @@ pub(crate) fn parse_pane_line(line: &str) -> Option<PaneInfo> {
         attention: !parts[2].is_empty(),
         agent,
         path,
+        current_command: parts[6].to_string(),
         pane_id: parts[8].to_string(),
         prompt,
         prompt_is_response,
@@ -636,6 +638,7 @@ mod tests {
             attention: false,
             agent: AgentType::Codex,
             path: "/tmp".into(),
+            current_command: String::new(),
             prompt: String::new(),
             prompt_is_response: false,
             started_at: None,
@@ -750,6 +753,7 @@ mod tests {
         assert_eq!(pane.status, PaneStatus::Running);
         assert_eq!(pane.agent, AgentType::Claude);
         assert_eq!(pane.path, "/custom/cwd"); // pane_cwd preferred
+        assert_eq!(pane.current_command, "fish");
         assert_eq!(pane.pane_id, "%1");
         assert_eq!(pane.prompt, "fix the bug");
         assert!(!pane.prompt_is_response);

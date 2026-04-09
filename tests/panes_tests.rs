@@ -29,25 +29,25 @@ fn test_agents_auto_scroll_keeps_selected_visible() {
     }]);
     state.repo_groups = vec![make_repo_group("project", panes)];
     state.sidebar_focused = true;
-    state.focus = Focus::Agents;
+    state.focus = Focus::Panes;
     state.rebuild_row_targets();
 
     // Render with a small height (only 6 lines visible for agents, 20 for bottom)
     // Total height = 26, bottom = 20, agents = 6
     let _ = render_to_string(&mut state, 28, 26);
-    assert_eq!(state.agents_scroll.offset, 0, "initially at top");
+    assert_eq!(state.panes_scroll.offset, 0, "initially at top");
 
     // Select last agent and re-render
-    state.global.selected_agent_row = 9;
+    state.global.selected_pane_row = 9;
     let _ = render_to_string(&mut state, 28, 26);
     assert!(
-        state.agents_scroll.offset > 0,
+        state.panes_scroll.offset > 0,
         "should scroll down to show selected agent"
     );
 }
 
 #[test]
-fn test_agents_scroll_offset_tracks_total_and_visible() {
+fn test_panes_scroll_offset_tracks_total_and_visible() {
     let pane = make_pane(AgentType::Claude, PaneStatus::Idle);
     let mut state = make_state(vec![SessionInfo {
         session_name: "main".into(),
@@ -63,13 +63,13 @@ fn test_agents_scroll_offset_tracks_total_and_visible() {
     state.rebuild_row_targets();
 
     let _ = render_to_string(&mut state, 28, 26);
-    // After rendering, agents_scroll.total_lines and agents_scroll.visible_height should be set
+    // After rendering, panes_scroll.total_lines and panes_scroll.visible_height should be set
     assert!(
-        state.agents_scroll.total_lines > 0,
+        state.panes_scroll.total_lines > 0,
         "total lines should be populated"
     );
     assert!(
-        state.agents_scroll.visible_height > 0,
+        state.panes_scroll.visible_height > 0,
         "visible height should be populated"
     );
 }
@@ -263,11 +263,11 @@ fn test_agents_auto_scroll_includes_group_bottom_border() {
     }]);
     state.repo_groups = vec![make_repo_group("project", panes)];
     state.sidebar_focused = true;
-    state.focus = Focus::Agents;
+    state.focus = Focus::Panes;
     state.rebuild_row_targets();
 
     // Select the last agent
-    state.global.selected_agent_row = 5;
+    state.global.selected_pane_row = 5;
     // Use a tight height so agents area is small (height - 1 margin - 20 bottom)
     let output = render_to_string(&mut state, 28, 26);
 
@@ -301,16 +301,16 @@ fn test_agents_auto_scroll_up_shows_group_header() {
     }]);
     state.repo_groups = vec![make_repo_group("project", panes)];
     state.sidebar_focused = true;
-    state.focus = Focus::Agents;
+    state.focus = Focus::Panes;
     state.rebuild_row_targets();
 
     // Scroll to bottom
-    state.global.selected_agent_row = 7;
+    state.global.selected_pane_row = 7;
     let _ = render_to_string(&mut state, 28, 26);
-    assert!(state.agents_scroll.offset > 0, "should have scrolled down");
+    assert!(state.panes_scroll.offset > 0, "should have scrolled down");
 
     // Now select first agent and re-render
-    state.global.selected_agent_row = 0;
+    state.global.selected_pane_row = 0;
     let output = render_to_string(&mut state, 28, 26);
 
     // The group header should be visible

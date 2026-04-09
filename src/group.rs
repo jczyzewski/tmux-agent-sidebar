@@ -208,6 +208,7 @@ mod tests {
             attention: false,
             agent: crate::tmux::AgentType::Claude,
             path: path.into(),
+            current_command: String::new(),
             prompt: String::new(),
             prompt_is_response: false,
             started_at: None,

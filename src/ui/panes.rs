@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-use crate::state::{AgentFilter, AppState, Focus, RepoFilter};
+use crate::state::{StatusFilter, AppState, Focus, RepoFilter};
 use crate::tmux::PaneStatus;
 use crate::ui::colors::ColorTheme;
 
@@ -20,25 +20,25 @@ fn render_filter_bar<'a>(state: &AppState, bar_width: u16) -> (Line<'a>, u16) {
     let theme = &state.theme;
     let (all, running, waiting, idle, error) = state.status_counts();
 
-    let items: Vec<(AgentFilter, Option<(&str, ratatui::style::Color)>, usize)> = vec![
-        (AgentFilter::All, None, all),
+    let items: Vec<(StatusFilter, Option<(&str, ratatui::style::Color)>, usize)> = vec![
+        (StatusFilter::All, None, all),
         (
-            AgentFilter::Running,
+            StatusFilter::Running,
             Some((PaneStatus::Running.icon(), theme.status_running)),
             running,
         ),
         (
-            AgentFilter::Waiting,
+            StatusFilter::Waiting,
             Some((PaneStatus::Waiting.icon(), theme.status_waiting)),
             waiting,
         ),
         (
-            AgentFilter::Idle,
+            StatusFilter::Idle,
             Some((PaneStatus::Idle.icon(), theme.status_idle)),
             idle,
         ),
         (
-            AgentFilter::Error,
+            StatusFilter::Error,
             Some((PaneStatus::Error.icon(), theme.status_error)),
             error,
         ),
@@ -60,7 +60,7 @@ fn render_filter_bar<'a>(state: &AppState, bar_width: u16) -> (Line<'a>, u16) {
             current_width += 2;
         }
 
-        let is_selected = state.global.agent_filter == filter;
+        let is_selected = state.global.status_filter == filter;
 
         if let Some((icon, icon_color)) = icon_info {
             let icon_style = Style::default().fg(icon_color);
@@ -242,7 +242,7 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
         line_to_row.push(None);
     }
 
-    let filter = state.global.agent_filter;
+    let filter = state.global.status_filter;
 
     for group in &state.repo_groups {
         if !state.global.repo_filter.matches_group(&group.name) {
@@ -298,8 +298,8 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
             }
 
             let is_selected = state.sidebar_focused
-                && state.focus == Focus::Agents
-                && row_index == state.global.selected_agent_row;
+                && state.focus == Focus::Panes
+                && row_index == state.global.selected_pane_row;
 
             let is_active = state
                 .focused_pane_id
@@ -308,11 +308,13 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
 
             let pane_state = state.pane_state(&pane.pane_id);
             let ports = pane_state.map(|s| s.ports.as_slice());
+            let command = None;
             let task_progress = pane_state.and_then(|s| s.task_progress.as_ref());
             let pane_lines = render_pane_lines_with_ports(
                 pane,
                 git_info,
                 ports,
+                command,
                 task_progress,
                 is_selected,
                 is_active,
@@ -340,15 +342,15 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
     }
 
     state.line_to_row = line_to_row;
-    state.agents_scroll.total_lines = lines.len();
-    state.agents_scroll.visible_height = list_area.height as usize;
+    state.panes_scroll.total_lines = lines.len();
+    state.panes_scroll.visible_height = list_area.height as usize;
 
     // Auto-scroll to keep selected agent visible
-    if state.sidebar_focused && state.focus == Focus::Agents {
+    if state.sidebar_focused && state.focus == Focus::Panes {
         let mut first_line: Option<usize> = None;
         let mut last_line: Option<usize> = None;
         for (i, mapping) in state.line_to_row.iter().enumerate() {
-            if *mapping == Some(state.global.selected_agent_row) {
+            if *mapping == Some(state.global.selected_pane_row) {
                 if first_line.is_none() {
                     first_line = Some(i);
                 }
@@ -365,16 +367,16 @@ pub fn draw_agents(frame: &mut Frame, state: &mut AppState, area: Rect) {
                 }
             }
             let visible_h = list_area.height as usize;
-            let offset = state.agents_scroll.offset;
+            let offset = state.panes_scroll.offset;
             if first < offset {
-                state.agents_scroll.offset = first.saturating_sub(1);
+                state.panes_scroll.offset = first.saturating_sub(1);
             } else if effective_last >= offset + visible_h {
-                state.agents_scroll.offset = (effective_last + 1).saturating_sub(visible_h);
+                state.panes_scroll.offset = (effective_last + 1).saturating_sub(visible_h);
             }
         }
     }
 
-    let paragraph = Paragraph::new(lines).scroll((state.agents_scroll.offset as u16, 0));
+    let paragraph = Paragraph::new(lines).scroll((state.panes_scroll.offset as u16, 0));
     frame.render_widget(paragraph, list_area);
 
     // Render popup overlay on top if open
@@ -429,6 +431,7 @@ fn render_pane_lines_with_ports<'a>(
     pane: &crate::tmux::PaneInfo,
     git_info: &crate::group::PaneGitInfo,
     ports: Option<&[u16]>,
+    _command: Option<&str>,
     task_progress: Option<&crate::activity::TaskProgress>,
     selected: bool,
     active: bool,
@@ -447,11 +450,11 @@ fn render_pane_lines_with_ports<'a>(
     let icon_color =
         pulse_color.unwrap_or_else(|| theme.status_color(&pane.status, pane.attention));
     use crate::tmux::PermissionMode;
-    let label = pane.agent.label();
+    let title = pane.agent.label();
     let badge = pane.permission_mode.badge();
     let elapsed = elapsed_label(pane.started_at, now);
 
-    let agent_fg = theme.agent_color(&pane.agent);
+    let title_fg = theme.agent_color(&pane.agent);
     let is_active_status = matches!(pane.status, PaneStatus::Running | PaneStatus::Waiting);
     let elapsed_fg = if is_active_status {
         theme.text_active
@@ -476,7 +479,7 @@ fn render_pane_lines_with_ports<'a>(
 
     let badge_extra = if badge.is_empty() { 0 } else { 1 };
     let left_dw =
-        display_width(icon) + 1 + display_width(label) + badge_extra + display_width(badge);
+        display_width(icon) + 1 + display_width(title) + badge_extra + display_width(badge);
     let available_for_elapsed = inner_width.saturating_sub(left_dw);
     let elapsed = truncate_to_width(&elapsed, available_for_elapsed);
     let elapsed_dw = display_width(&elapsed);
@@ -487,8 +490,8 @@ fn render_pane_lines_with_ports<'a>(
         Span::styled(" ", apply_bg(Style::default())),
         Span::styled(icon.to_string(), apply_bg(Style::default().fg(icon_color))),
         Span::styled(
-            format!(" {}", label),
-            apply_bg(Style::default().fg(agent_fg).add_modifier(active_mod)),
+            format!(" {}", title),
+            apply_bg(Style::default().fg(title_fg).add_modifier(active_mod)),
         ),
     ];
     if !badge.is_empty() {
@@ -774,6 +777,7 @@ mod tests {
             attention: false,
             agent: AgentType::Codex,
             path: "/tmp/project".into(),
+            current_command: String::new(),
             prompt: prompt.into(),
             prompt_is_response: is_response,
             started_at: None,
@@ -817,6 +821,7 @@ mod tests {
             &PaneGitInfo::default(),
             None,
             None,
+            None,
             false,
             false,
             theme.border_active,
@@ -845,6 +850,7 @@ mod tests {
             },
             Some(&ports),
             None,
+            None,
             false,
             false,
             theme.border_active,
@@ -862,6 +868,30 @@ mod tests {
     }
 
     #[test]
+    fn render_pane_lines_shows_command_row() {
+        let theme = ColorTheme::default();
+        let mut pane = pane(PermissionMode::Default, PaneStatus::Running, "");
+        pane.current_command = "npm run dev -- --port 3000".into();
+        let lines = render_pane_lines_with_ports(
+            &pane,
+            &PaneGitInfo::default(),
+            None,
+            Some("npm run dev -- --port 3000"),
+            None,
+            false,
+            false,
+            theme.border_active,
+            40,
+            &theme,
+            0,
+            0,
+        );
+
+        assert_eq!(lines.len(), 1);
+        assert!(lines.iter().all(|line| !line_text(line).contains("cmd:")));
+    }
+
+    #[test]
     fn render_pane_lines_truncates_long_branch_when_ports_present() {
         let theme = ColorTheme::default();
         let pane = pane(PermissionMode::Default, PaneStatus::Running, "");
@@ -876,6 +906,7 @@ mod tests {
             },
             Some(&ports),
             None,
+            None,
             false,
             false,
             theme.border_active,
@@ -889,7 +920,7 @@ mod tests {
         let branch_port_line = line_text(&lines[1]);
         assert!(
             branch_port_line.contains('…'),
-            "long branch should be truncated when ports share the row"
+            "long branch should be truncated"
         );
         assert!(branch_port_line.contains(":3000"));
         assert!(
@@ -906,6 +937,7 @@ mod tests {
         let lines = render_pane_lines_with_ports(
             &pane,
             &PaneGitInfo::default(),
+            None,
             None,
             None,
             false,
@@ -942,6 +974,7 @@ mod tests {
             &PaneGitInfo::default(),
             None,
             None,
+            None,
             false,
             false,
             theme.border_active,
@@ -969,6 +1002,7 @@ mod tests {
             &PaneGitInfo::default(),
             None,
             None,
+            None,
             false,
             false,
             theme.border_active,
@@ -992,6 +1026,7 @@ mod tests {
         let lines = render_pane_lines_with_ports(
             &p,
             &PaneGitInfo::default(),
+            None,
             None,
             None,
             false,
@@ -1018,6 +1053,7 @@ mod tests {
         let lines = render_pane_lines_with_ports(
             &p,
             &PaneGitInfo::default(),
+            None,
             None,
             None,
             false,
@@ -1048,6 +1084,7 @@ mod tests {
         let lines = render_pane_lines_with_ports(
             &p,
             &PaneGitInfo::default(),
+            None,
             None,
             None,
             false,
@@ -1081,6 +1118,7 @@ mod tests {
             &PaneGitInfo::default(),
             None,
             None,
+            None,
             false,
             false,
             theme.border_active,
@@ -1112,6 +1150,7 @@ mod tests {
             &PaneGitInfo::default(),
             None,
             None,
+            None,
             false,
             false,
             theme.border_active,
@@ -1138,6 +1177,7 @@ mod tests {
         let lines = render_pane_lines_with_ports(
             &p,
             &PaneGitInfo::default(),
+            None,
             None,
             None,
             false,
@@ -1171,6 +1211,7 @@ mod tests {
             &p,
             &PaneGitInfo::default(),
             None,
+            None,
             Some(&progress),
             false,
             false,
@@ -1197,6 +1238,7 @@ mod tests {
         let lines = render_pane_lines_with_ports(
             &p,
             &PaneGitInfo::default(),
+            None,
             None,
             Some(&progress),
             false,

@@ -5,7 +5,7 @@ use indoc::indoc;
 use test_helpers::*;
 use tmux_agent_sidebar::activity::{ActivityEntry, TaskProgress, TaskStatus};
 use tmux_agent_sidebar::group::PaneGitInfo;
-use tmux_agent_sidebar::state::{AgentFilter, Focus};
+use tmux_agent_sidebar::state::{StatusFilter, Focus};
 use tmux_agent_sidebar::tmux::{
     AgentType, PaneInfo, PaneStatus, PermissionMode, SessionInfo, WindowInfo,
 };
@@ -163,6 +163,7 @@ fn snapshot_two_agents_same_window_ui() {
         attention: false,
         agent: AgentType::Claude,
         path: "/home/user/project".into(),
+        current_command: String::new(),
         prompt: "fix the bug".into(),
         prompt_is_response: false,
         started_at: None,
@@ -180,6 +181,7 @@ fn snapshot_two_agents_same_window_ui() {
         attention: false,
         agent: AgentType::Codex,
         path: "/home/user/project".into(),
+        current_command: String::new(),
         prompt: String::new(),
         prompt_is_response: false,
         started_at: None,
@@ -1168,7 +1170,7 @@ fn snapshot_filter_running_hides_idle() {
     };
 
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane1, pane2])]);
-    state.global.agent_filter = AgentFilter::Running;
+    state.global.status_filter = StatusFilter::Running;
     let output = render_to_string(&mut state, 30, 25);
     assert!(output.contains("claude"), "running agent should appear");
     assert!(!output.contains("codex"), "idle agent should be hidden");
@@ -1186,7 +1188,7 @@ fn snapshot_filter_idle_hides_running() {
     };
 
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane1, pane2])]);
-    state.global.agent_filter = AgentFilter::Idle;
+    state.global.status_filter = StatusFilter::Idle;
     let output = render_to_string(&mut state, 30, 25);
     assert!(!output.contains("claude"), "running agent should be hidden");
     assert!(output.contains("codex"), "idle agent should appear");
@@ -1207,7 +1209,7 @@ fn snapshot_filter_hides_empty_groups() {
         make_repo_group("repo-a", vec![pane1]),
         make_repo_group("repo-b", vec![pane2]),
     ]);
-    state.global.agent_filter = AgentFilter::Running;
+    state.global.status_filter = StatusFilter::Running;
     let output = render_to_string(&mut state, 30, 25);
     assert!(
         output.contains("repo-a"),
@@ -1231,7 +1233,7 @@ fn snapshot_filter_all_shows_everything() {
     };
 
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane1, pane2])]);
-    state.global.agent_filter = AgentFilter::All;
+    state.global.status_filter = StatusFilter::All;
     let output = render_to_string(&mut state, 30, 30);
     assert!(output.contains("claude"), "running agent should appear");
     assert!(output.contains("codex"), "idle agent should appear");
@@ -1282,7 +1284,7 @@ fn snapshot_filter_bar_stays_fixed_on_scroll() {
         })
         .collect();
     let mut state = make_state_with_groups(vec![make_repo_group("project", panes)]);
-    state.agents_scroll.offset = 3; // scroll down
+    state.panes_scroll.offset = 3; // scroll down
 
     let output = render_to_string(&mut state, 30, 15);
     // Filter bar should always be the first line regardless of scroll
@@ -1301,7 +1303,7 @@ fn snapshot_filter_bar_stays_fixed_on_scroll() {
 fn snapshot_filter_selected_has_underline() {
     let pane = make_pane(AgentType::Claude, PaneStatus::Running);
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane])]);
-    state.global.agent_filter = AgentFilter::Running;
+    state.global.status_filter = StatusFilter::Running;
 
     let styled = render_to_styled_string(&mut state, 30, 25);
     // Selected filter (Running) should have underline
@@ -1315,7 +1317,7 @@ fn snapshot_filter_selected_has_underline() {
 fn snapshot_filter_selection_does_not_use_status_color() {
     let pane = make_pane(AgentType::Claude, PaneStatus::Idle);
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane])]);
-    state.global.agent_filter = AgentFilter::Running;
+    state.global.status_filter = StatusFilter::Running;
 
     let styled = render_to_styled_string(&mut state, 30, 25);
     assert!(
@@ -1332,7 +1334,7 @@ fn snapshot_filter_selection_does_not_use_status_color() {
 fn snapshot_filter_selection_uses_visible_underline_color_when_count_is_zero() {
     let pane = make_pane(AgentType::Claude, PaneStatus::Idle);
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane])]);
-    state.global.agent_filter = AgentFilter::Running;
+    state.global.status_filter = StatusFilter::Running;
 
     let styled = render_to_styled_string(&mut state, 30, 25);
     assert!(
@@ -1354,7 +1356,7 @@ fn snapshot_filter_error_shows_agents() {
     };
 
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane1, pane2])]);
-    state.global.agent_filter = AgentFilter::Error;
+    state.global.status_filter = StatusFilter::Error;
     let output = render_to_string(&mut state, 30, 25);
     assert!(output.contains("claude"), "error agent should appear");
     assert!(!output.contains("codex"), "running agent should be hidden");
@@ -1374,7 +1376,7 @@ fn snapshot_filter_waiting_shows_only_waiting() {
     };
 
     let mut state = make_state_with_groups(vec![make_repo_group("project", vec![pane1, pane2])]);
-    state.global.agent_filter = AgentFilter::Waiting;
+    state.global.status_filter = StatusFilter::Waiting;
     let output = render_to_string(&mut state, 30, 25);
     assert!(output.contains("claude"), "waiting agent should appear");
     assert!(!output.contains("codex"), "idle agent should be hidden");
