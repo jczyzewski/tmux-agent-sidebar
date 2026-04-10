@@ -32,6 +32,12 @@ fn parse_agent_id(input: &Value) -> Option<String> {
     if id.is_empty() { None } else { Some(id.into()) }
 }
 
+/// Parse optional session_id from hook payload.
+fn parse_session_id(input: &Value) -> Option<String> {
+    let id = json_str(input, "session_id");
+    if id.is_empty() { None } else { Some(id.into()) }
+}
+
 fn parse_json_field(input: &Value, field: &str) -> Value {
     input
         .get(field)
@@ -152,6 +158,7 @@ impl EventAdapter for ClaudeAdapter {
                 permission_mode: json_str(input, "permission_mode").into(),
                 worktree: parse_worktree(input),
                 agent_id: parse_agent_id(input),
+                session_id: parse_session_id(input),
             }),
             "session-end" => Some(AgentEvent::SessionEnd),
             "user-prompt-submit" => Some(AgentEvent::UserPromptSubmit {
@@ -161,6 +168,7 @@ impl EventAdapter for ClaudeAdapter {
                 prompt: json_str(input, "prompt").into(),
                 worktree: parse_worktree(input),
                 agent_id: parse_agent_id(input),
+                session_id: parse_session_id(input),
             }),
             "notification" => {
                 let wait_reason = json_str(input, "notification_type");
@@ -173,6 +181,7 @@ impl EventAdapter for ClaudeAdapter {
                     meta_only,
                     worktree: parse_worktree(input),
                     agent_id: parse_agent_id(input),
+                    session_id: parse_session_id(input),
                 })
             }
             "stop" => Some(AgentEvent::Stop {
@@ -183,6 +192,7 @@ impl EventAdapter for ClaudeAdapter {
                 response: None,
                 worktree: parse_worktree(input),
                 agent_id: parse_agent_id(input),
+                session_id: parse_session_id(input),
             }),
             "stop-failure" => {
                 // Upstream fields: error_type (category), error_message (detail)
@@ -207,6 +217,7 @@ impl EventAdapter for ClaudeAdapter {
                     error: error.into(),
                     worktree: parse_worktree(input),
                     agent_id: parse_agent_id(input),
+                    session_id: parse_session_id(input),
                 })
             }
             "permission-denied" => Some(AgentEvent::PermissionDenied {
@@ -215,11 +226,13 @@ impl EventAdapter for ClaudeAdapter {
                 permission_mode: json_str(input, "permission_mode").into(),
                 worktree: parse_worktree(input),
                 agent_id: parse_agent_id(input),
+                session_id: parse_session_id(input),
             }),
             "cwd-changed" => Some(AgentEvent::CwdChanged {
                 cwd: json_str(input, "cwd").into(),
                 worktree: parse_worktree(input),
                 agent_id: parse_agent_id(input),
+                session_id: parse_session_id(input),
             }),
             "subagent-start" => {
                 let agent_type = json_str(input, "agent_type");
@@ -298,6 +311,7 @@ mod tests {
                 permission_mode: "default".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -325,6 +339,7 @@ mod tests {
                 prompt: "fix bug".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -345,6 +360,7 @@ mod tests {
                 meta_only: false,
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -364,6 +380,7 @@ mod tests {
                 meta_only: true,
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -384,6 +401,7 @@ mod tests {
                 response: None,
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -402,6 +420,7 @@ mod tests {
                 error: "rate_limit".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -420,6 +439,7 @@ mod tests {
                 error: "rate_limit".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -438,6 +458,7 @@ mod tests {
                 error: "something went wrong".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -456,6 +477,7 @@ mod tests {
                 error: "something went wrong".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -823,6 +845,7 @@ mod tests {
                 meta_only: false,
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -880,6 +903,7 @@ mod tests {
                 error: "rate_limit".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -898,6 +922,7 @@ mod tests {
                 error: "".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -917,6 +942,7 @@ mod tests {
                 response: None,
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -984,6 +1010,7 @@ mod tests {
                 permission_mode: "auto".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -999,6 +1026,7 @@ mod tests {
                 cwd: "/new/path".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }
@@ -1065,6 +1093,7 @@ mod tests {
                 permission_mode: "".into(),
                 worktree: None,
                 agent_id: None,
+                session_id: None,
             }
         );
     }

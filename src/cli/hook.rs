@@ -47,6 +47,7 @@ fn set_agent_meta(
     cwd: &str,
     permission_mode: &str,
     worktree: &Option<WorktreeInfo>,
+    session_id: &Option<String>,
 ) {
     tmux::set_pane_option(pane, "@pane_agent", agent);
     if !cwd.is_empty() {
@@ -58,6 +59,9 @@ fn set_agent_meta(
     }
     if !permission_mode.is_empty() {
         tmux::set_pane_option(pane, "@pane_permission_mode", permission_mode);
+    }
+    if let Some(sid) = session_id {
+        tmux::set_pane_option(pane, "@pane_session_id", sid);
     }
     sync_worktree_meta(pane, worktree);
 }
@@ -82,6 +86,7 @@ fn clear_all_meta(pane: &str) {
         "@pane_permission_mode",
         "@pane_worktree_name",
         "@pane_worktree_branch",
+        "@pane_session_id",
     ] {
         tmux::unset_pane_option(pane, key);
     }
@@ -189,9 +194,10 @@ fn handle_event(pane: &str, event: AgentEvent) -> i32 {
             cwd,
             permission_mode,
             worktree,
+            session_id,
             ..
         } => {
-            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree);
+            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree, &session_id);
             set_attention(pane, "clear");
             clear_run_state(pane);
             tmux::unset_pane_option(pane, "@pane_prompt");
@@ -212,9 +218,10 @@ fn handle_event(pane: &str, event: AgentEvent) -> i32 {
             permission_mode,
             prompt,
             worktree,
+            session_id,
             ..
         } => {
-            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree);
+            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree, &session_id);
             set_attention(pane, "clear");
             set_status(pane, "running");
             if !prompt.is_empty() && !is_system_message(&prompt) {
@@ -233,9 +240,10 @@ fn handle_event(pane: &str, event: AgentEvent) -> i32 {
             wait_reason,
             meta_only,
             worktree,
+            session_id,
             ..
         } => {
-            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree);
+            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree, &session_id);
             if meta_only {
                 return 0;
             }
@@ -252,9 +260,10 @@ fn handle_event(pane: &str, event: AgentEvent) -> i32 {
             last_message,
             response,
             worktree,
+            session_id,
             ..
         } => {
-            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree);
+            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree, &session_id);
             set_attention(pane, "clear");
             if !last_message.is_empty() {
                 let msg = sanitize_tmux_value(&last_message);
@@ -273,9 +282,10 @@ fn handle_event(pane: &str, event: AgentEvent) -> i32 {
             permission_mode,
             error,
             worktree,
+            session_id,
             ..
         } => {
-            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree);
+            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree, &session_id);
             set_attention(pane, "clear");
             clear_run_state(pane);
             if !error.is_empty() {
@@ -324,14 +334,23 @@ fn handle_event(pane: &str, event: AgentEvent) -> i32 {
             cwd,
             permission_mode,
             worktree,
+            session_id,
             ..
         } => {
-            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree);
+            set_agent_meta(pane, &agent, &cwd, &permission_mode, &worktree, &session_id);
             set_status(pane, "waiting");
             set_attention(pane, "notification");
             tmux::set_pane_option(pane, "@pane_wait_reason", "permission_denied");
         }
-        AgentEvent::CwdChanged { cwd, worktree, .. } => {
+        AgentEvent::CwdChanged {
+            cwd,
+            worktree,
+            session_id,
+            ..
+        } => {
+            if let Some(ref sid) = session_id {
+                tmux::set_pane_option(pane, "@pane_session_id", sid);
+            }
             if !cwd.is_empty() {
                 let effective = resolve_cwd(&cwd, &worktree);
                 let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
