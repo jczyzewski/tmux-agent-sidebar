@@ -136,13 +136,14 @@ impl AppState {
             self.last_session_refresh = std::time::Instant::now();
         }
 
-        // Populate session_name on each pane from the cached map
         for group in &mut self.repo_groups {
             for (pane, _) in &mut group.panes {
                 if let Some(sid) = &pane.session_id
                     && let Some(name) = self.session_names.get(sid)
                 {
                     pane.session_name.clone_from(name);
+                } else {
+                    pane.session_name.clear();
                 }
             }
         }

@@ -531,7 +531,6 @@ mod tests {
             None,
             false,
             false,
-            theme.border_active,
             40,
             &StatusIcons::default(),
             &theme,

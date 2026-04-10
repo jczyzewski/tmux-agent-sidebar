@@ -41,6 +41,25 @@ fn sync_worktree_meta(pane: &str, worktree: &Option<WorktreeInfo>) {
     }
 }
 
+fn sync_pane_location(
+    pane: &str,
+    cwd: &str,
+    worktree: &Option<WorktreeInfo>,
+    session_id: &Option<String>,
+) {
+    if let Some(sid) = session_id {
+        tmux::set_pane_option(pane, "@pane_session_id", sid);
+    }
+    if !cwd.is_empty() {
+        let effective_cwd = resolve_cwd(cwd, worktree);
+        let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
+        if should_update_cwd(&current_subagents) {
+            tmux::set_pane_option(pane, "@pane_cwd", effective_cwd);
+        }
+    }
+    sync_worktree_meta(pane, worktree);
+}
+
 fn set_agent_meta(
     pane: &str,
     agent: &str,
@@ -50,20 +69,10 @@ fn set_agent_meta(
     session_id: &Option<String>,
 ) {
     tmux::set_pane_option(pane, "@pane_agent", agent);
-    if !cwd.is_empty() {
-        let effective_cwd = resolve_cwd(cwd, worktree);
-        let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
-        if should_update_cwd(&current_subagents) {
-            tmux::set_pane_option(pane, "@pane_cwd", effective_cwd);
-        }
-    }
     if !permission_mode.is_empty() {
         tmux::set_pane_option(pane, "@pane_permission_mode", permission_mode);
     }
-    if let Some(sid) = session_id {
-        tmux::set_pane_option(pane, "@pane_session_id", sid);
-    }
-    sync_worktree_meta(pane, worktree);
+    sync_pane_location(pane, cwd, worktree, session_id);
 }
 
 fn clear_run_state(pane: &str) {
@@ -348,17 +357,7 @@ fn handle_event(pane: &str, event: AgentEvent) -> i32 {
             session_id,
             ..
         } => {
-            if let Some(ref sid) = session_id {
-                tmux::set_pane_option(pane, "@pane_session_id", sid);
-            }
-            if !cwd.is_empty() {
-                let effective = resolve_cwd(&cwd, &worktree);
-                let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
-                if should_update_cwd(&current_subagents) {
-                    tmux::set_pane_option(pane, "@pane_cwd", effective);
-                }
-            }
-            sync_worktree_meta(pane, &worktree);
+            sync_pane_location(pane, &cwd, &worktree, &session_id);
         }
         AgentEvent::TaskCreated { .. } => {
             // Redundant with activity-log; TaskCreate tool use already recorded

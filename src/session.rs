@@ -9,7 +9,6 @@ fn sessions_dir() -> Option<PathBuf> {
 }
 
 /// Scan `~/.claude/sessions/*.json` for session names.
-/// Returns a map of `session_id → session_name` for sessions that have a name.
 pub fn scan_session_names() -> HashMap<String, String> {
     let mut map = HashMap::new();
     let Some(dir) = sessions_dir() else {
