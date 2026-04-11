@@ -110,6 +110,7 @@ fn status_row(
         let badge_color = match pane.permission_mode {
             PermissionMode::BypassPermissions => theme.badge_danger,
             PermissionMode::Auto => theme.badge_auto,
+            PermissionMode::DontAsk => theme.badge_auto,
             PermissionMode::Plan => theme.badge_plan,
             PermissionMode::AcceptEdits => theme.badge_auto,
             PermissionMode::Default => theme.text_muted,

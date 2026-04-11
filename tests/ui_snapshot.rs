@@ -1301,6 +1301,7 @@ fn right_border_all_permission_modes_and_agents() {
     let modes_and_badges: &[(PermissionMode, &str)] = &[
         (PermissionMode::Default, ""),
         (PermissionMode::Auto, "auto"),
+        (PermissionMode::DontAsk, "dontAsk"),
         (PermissionMode::Plan, "plan"),
         (PermissionMode::AcceptEdits, "edit"),
         (PermissionMode::BypassPermissions, "!"),
