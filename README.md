@@ -110,10 +110,16 @@ The sidebar receives status updates through agent hooks. Add the following hook 
 
 #### 3.1 Claude Code
 
-Add to your Claude Code hooks configuration (e.g. `~/.claude/settings.json`):
+Two paths — the LLM-assisted one is recommended because it merges with any existing settings and picks up the right `hook.sh` path automatically.
+
+**Option A — Let an LLM wire it up (recommended).** Paste the following prompt into a Claude Code session:
+
+```
+Run ~/.tmux/plugins/tmux-agent-sidebar/target/release/tmux-agent-sidebar doctor claude (fall back to ~/.tmux/plugins/tmux-agent-sidebar/bin/tmux-agent-sidebar if that path is missing). Add these hooks to ~/.claude/settings.json. If hooks already exist, merge them without making destructive changes.
+```
 
 <details>
-<summary>Claude Code hooks JSON</summary>
+<summary>Option B — Manual: copy-paste this JSON into <code>~/.claude/settings.json</code></summary>
 
 ```json
 {
@@ -302,10 +308,16 @@ Add to your Claude Code hooks configuration (e.g. `~/.claude/settings.json`):
 
 #### 3.2 Codex
 
-Create or edit `~/.codex/hooks.json`:
+Same two paths as Claude Code.
+
+**Option A — Let an LLM wire it up (recommended).** Paste the following prompt into a Codex session:
+
+```
+Run ~/.tmux/plugins/tmux-agent-sidebar/target/release/tmux-agent-sidebar doctor codex (fall back to ~/.tmux/plugins/tmux-agent-sidebar/bin/tmux-agent-sidebar if that path is missing). Add these hooks to ~/.codex/hooks.json. If hooks already exist, merge them without making destructive changes.
+```
 
 <details>
-<summary>Codex hooks JSON</summary>
+<summary>Option B — Manual: copy-paste this JSON into <code>~/.codex/hooks.json</code></summary>
 
 ```json
 {
