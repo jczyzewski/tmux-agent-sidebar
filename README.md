@@ -350,6 +350,16 @@ Create or edit `~/.codex/hooks.json`:
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.tmux/plugins/tmux-agent-sidebar/hook.sh codex activity-log"
+          }
+        ]
+      }
     ]
   }
 }
@@ -387,16 +397,16 @@ Create or edit `~/.codex/hooks.json`:
 | Permission badge | :white_check_mark: (`plan` / `edit` / `auto` / `!`) | :white_check_mark: (`auto` / `!` only) | Codex badges are inferred from process args |
 | Git branch display | :white_check_mark: | :white_check_mark: | Uses the pane `cwd`; Claude updates dynamically via `CwdChanged` |
 | Elapsed time | :white_check_mark: | :white_check_mark: | Since the last prompt |
-| Task progress | :white_check_mark: | :x: | Requires `PostToolUse` |
+| Task progress | :white_check_mark: | :x: | Requires `PostToolUse`; Codex fires `PostToolUse` only for `Bash` so task-progress-from-tools is unavailable |
 | Task lifecycle notifications | :white_check_mark: | :x: | Requires `TaskCreated` / `TaskCompleted` |
 | Subagent display | :white_check_mark: | :x: | Requires `SubagentStart` / `SubagentStop` |
-| Activity log | :white_check_mark: | :x: | Requires `PostToolUse` |
+| Activity log | :white_check_mark: | :white_check_mark: (Bash only) | Codex's `PostToolUse` fires only for `Bash` tool calls; `Read`/`Edit`/`Write`/`Grep`/`Glob`/etc. are not reported |
 | Worktree lifecycle tracking | :white_check_mark: | :x: | Requires `WorktreeCreate` / `WorktreeRemove` |
 
 ### Known Limitations
 
 - **Waiting status (Claude Code)** — After approving a permission prompt, the status stays `waiting` until the next hook event fires. This is a limitation of the Claude Code hook system.
-- **Codex hook coverage** — Codex only emits `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd`, so waiting status, activity log, task progress, subagent display, and worktree tracking are unavailable.
+- **Codex hook coverage** — Codex emits `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`, and `PostToolUse`. `PostToolUse` is limited to the `Bash` tool (Codex's schema types `tool_input` as `{ command: string }`), so the Codex activity log shows only Bash commands. Waiting status, task progress, subagent display, and worktree tracking remain unavailable.
 
 ## Customization
 

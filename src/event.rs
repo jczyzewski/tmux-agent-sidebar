@@ -358,11 +358,6 @@ mod tests {
                 .parse("subagent-stop", &json!({"agent_type": "X"}))
                 .is_none()
         );
-        assert!(
-            adapter
-                .parse("activity-log", &json!({"tool_name": "Read"}))
-                .is_none()
-        );
     }
 
     #[test]
