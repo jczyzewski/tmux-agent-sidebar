@@ -1,6 +1,6 @@
-mod setup;
 mod hook;
 mod label;
+mod setup;
 mod toggle;
 
 use std::io::Read;
