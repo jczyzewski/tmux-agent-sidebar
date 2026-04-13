@@ -47,14 +47,17 @@ fn sync_pane_location(
     worktree: &Option<WorktreeInfo>,
     session_id: &Option<String>,
 ) {
-    match session_id.as_deref() {
-        Some(sid) if !sid.is_empty() => tmux::set_pane_option(pane, "@pane_session_id", sid),
-        _ => tmux::unset_pane_option(pane, "@pane_session_id"),
-    }
-    if !cwd.is_empty() {
-        let effective_cwd = resolve_cwd(cwd, worktree);
-        let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
-        if should_update_cwd(&current_subagents) {
+    // Subagents share the parent's $TMUX_PANE and can fire their own
+    // SessionStart with a different session_id; skip pane-scoped writes
+    // so the parent's identity is preserved (mirrors the cwd guard).
+    let current_subagents = tmux::get_pane_option_value(pane, "@pane_subagents");
+    if should_update_cwd(&current_subagents) {
+        match session_id.as_deref() {
+            Some(sid) if !sid.is_empty() => tmux::set_pane_option(pane, "@pane_session_id", sid),
+            _ => tmux::unset_pane_option(pane, "@pane_session_id"),
+        }
+        if !cwd.is_empty() {
+            let effective_cwd = resolve_cwd(cwd, worktree);
             tmux::set_pane_option(pane, "@pane_cwd", effective_cwd);
         }
     }
