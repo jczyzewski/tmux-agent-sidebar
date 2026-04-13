@@ -47,8 +47,9 @@ fn sync_pane_location(
     worktree: &Option<WorktreeInfo>,
     session_id: &Option<String>,
 ) {
-    if let Some(sid) = session_id {
-        tmux::set_pane_option(pane, "@pane_session_id", sid);
+    match session_id.as_deref() {
+        Some(sid) if !sid.is_empty() => tmux::set_pane_option(pane, "@pane_session_id", sid),
+        _ => tmux::unset_pane_option(pane, "@pane_session_id"),
     }
     if !cwd.is_empty() {
         let effective_cwd = resolve_cwd(cwd, worktree);

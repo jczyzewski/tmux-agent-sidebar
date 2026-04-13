@@ -33,8 +33,8 @@ pub fn scan_session_names() -> HashMap<String, String> {
 fn parse_session_file(path: &std::path::Path) -> Option<(String, String)> {
     let content = std::fs::read_to_string(path).ok()?;
     let val: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let session_id = val.get("sessionId")?.as_str()?;
-    let name = val.get("name")?.as_str()?;
+    let session_id = val.get("sessionId")?.as_str()?.trim();
+    let name = val.get("name")?.as_str()?.trim();
     if session_id.is_empty() || name.is_empty() {
         return None;
     }
@@ -81,6 +81,21 @@ mod tests {
         fs::write(
             &path,
             r#"{"pid":12345,"sessionId":"abc-def","name":"","cwd":"/tmp"}"#,
+        )
+        .unwrap();
+
+        assert!(parse_session_file(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_session_file_whitespace_only_name() {
+        let dir = std::env::temp_dir().join("session_test_whitespace_name");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("12345.json");
+        fs::write(
+            &path,
+            r#"{"pid":12345,"sessionId":"abc-def","name":"   ","cwd":"/tmp"}"#,
         )
         .unwrap();
 
